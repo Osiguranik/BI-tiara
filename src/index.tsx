@@ -733,7 +733,8 @@ const html = `<!DOCTYPE html>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <!-- Brzi filteri -->
       <div style="display:flex;gap:4px;background:#1e293b;padding:4px;border-radius:10px">
-        <button class="tab active" id="quick-30d" onclick="setQuickDate(30, this)">30 dana</button>
+        <button class="tab active" id="quick-mtd" onclick="setCurrentMonth(this)">Ovaj mesec</button>
+        <button class="tab" id="quick-30d" onclick="setQuickDate(30, this)">30 dana</button>
         <button class="tab" id="quick-90d" onclick="setQuickDate(90, this)">3 mes.</button>
         <button class="tab" id="quick-180d" onclick="setQuickDate(180, this)">6 mes.</button>
         <button class="tab" id="quick-1y" onclick="setQuickDate(365, this)">1 god.</button>
@@ -759,13 +760,23 @@ let dateFrom = ''
 let dateTo = ''
 
 function initDates() {
+  // Default: trenutni mesec (1. dan meseca → danas)
   const now = new Date()
-  const past = new Date(now)
-  past.setDate(past.getDate() - 30)
   dateTo = now.toISOString().split('T')[0]
-  dateFrom = past.toISOString().split('T')[0]
+  dateFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
   document.getElementById('date-from').value = dateFrom
   document.getElementById('date-to').value = dateTo
+}
+
+function setCurrentMonth(btn) {
+  document.querySelectorAll('.tab[id^=quick]').forEach(t => t.classList.remove('active'))
+  btn.classList.add('active')
+  const now = new Date()
+  dateTo = now.toISOString().split('T')[0]
+  dateFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+  document.getElementById('date-from').value = dateFrom
+  document.getElementById('date-to').value = dateTo
+  loadCurrentModule()
 }
 
 function setQuickDate(days, btn) {
