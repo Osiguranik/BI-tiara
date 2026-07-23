@@ -956,6 +956,10 @@ pregled: async () => {
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-chart-pie mr-1"></i> Naša marža (neto)</div>
         <div style="font-size:22px;font-weight:700;color:#10b981">\${fmtEur(d.marza?.nasa_marza)}</div>
         <div style="font-size:12px;color:#64748b;margin-top:4px">Gross: \${fmtEur(d.marza?.gross_marza)}</div>
+        <div style="margin-top:8px;padding-top:8px;border-top:1px solid #1e3a5f">
+          <div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Bez PDV (−20%)</div>
+          <div style="font-size:18px;font-weight:700;color:#34d399">\${fmtEur(d.marza?.nasa_marza * 0.80)}</div>
+        </div>
       </div>
       <div class="kpi-card" style="background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid #334155;border-radius:12px;padding:20px;position:relative;overflow:hidden;">
         <div style="content:'';position:absolute;top:-30px;right:-30px;width:100px;height:100px;border-radius:50%;opacity:.1;background:#f59e0b"></div>
@@ -1270,6 +1274,10 @@ async function finTab(tab, btn) {
           <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-star mr-1" style="color:#10b981"></i>NAŠA MARŽA</div>
           <div style="font-size:22px;font-weight:700;color:#10b981">\${fmtEur(totalNasaMarza)}</div>
           <div style="font-size:11px;color:#475569;margin-top:4px">\${totalGross>0?fmt(totalNasaMarza/totalGross*100,1)+'% od gross':'—'}</div>
+          <div style="margin-top:8px;padding-top:8px;border-top:1px solid #166534">
+            <div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Bez PDV (−20%)</div>
+            <div style="font-size:18px;font-weight:700;color:#34d399">\${fmtEur(totalNasaMarza * 0.80)}</div>
+          </div>
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
@@ -1286,6 +1294,43 @@ async function finTab(tab, btn) {
         <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-layer-group mr-2" style="color:#10b981"></i>Raspodela marže po mesecima — 3 sloja</div>
         <div style="font-size:12px;color:#475569;margin-bottom:16px">Naša marža (zeleno) + Komisije agencijama (žuto) = Gross marža. Donji sloj je Net trošak.</div>
         <div class="chart-container" style="height:300px"><canvas id="chart-fin-stacked"></canvas></div>
+      </div>
+      <div class="card" style="margin-top:16px">
+        <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-table mr-2" style="color:#34d399"></i>Mesečni pregled marže sa PDV obračunom</div>
+        <div style="font-size:12px;color:#475569;margin-bottom:12px">Naša marža bez PDV = Naša marža × 0.80 (odbitak 20% PDV)</div>
+        <div style="overflow:auto;max-height:320px">
+          <table><thead><tr>
+            <th>Mesec</th>
+            <th>Prihod (EUR)</th>
+            <th>Gross marža</th>
+            <th style="color:#6ee7b7">Naša marža</th>
+            <th style="color:#34d399">Naša marža bez PDV</th>
+            <th>PDV (20%)</th>
+          </tr></thead><tbody>
+          \${marza.map((r,i)=>{
+            const prihod = parseFloat(prihodi[i]?.prihod_eur||0)
+            const nm = parseFloat(r.nasa_marza||0)
+            const nmBezPdv = nm * 0.80
+            const pdvIznos = nm * 0.20
+            return \`<tr>
+              <td style="font-weight:600">\${r.mesec}</td>
+              <td style="color:#10b981">\${fmtEur(prihod)}</td>
+              <td style="color:#8b5cf6">\${fmtEur(r.gross_marza)}</td>
+              <td style="color:#10b981;font-weight:600">\${fmtEur(nm)}</td>
+              <td style="color:#34d399;font-weight:700">\${fmtEur(nmBezPdv)}</td>
+              <td style="color:#ef4444;font-size:12px">\${fmtEur(pdvIznos)}</td>
+            </tr>\`
+          }).join('')}
+          <tr style="background:#0f172a;font-weight:700;border-top:2px solid #334155">
+            <td style="color:#f1f5f9">UKUPNO</td>
+            <td style="color:#10b981">\${fmtEur(totalPrihod)}</td>
+            <td style="color:#8b5cf6">\${fmtEur(totalGross)}</td>
+            <td style="color:#10b981">\${fmtEur(totalNasaMarza)}</td>
+            <td style="color:#34d399">\${fmtEur(totalNasaMarza * 0.80)}</td>
+            <td style="color:#ef4444">\${fmtEur(totalNasaMarza * 0.20)}</td>
+          </tr>
+          </tbody></table>
+        </div>
       </div>
     \`
     makeChart('chart-fin-prihodi', 'bar', {
@@ -1355,6 +1400,11 @@ async function finTab(tab, btn) {
           <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-star mr-1" style="color:#10b981"></i>NAŠA MARŽA</div>
           <div style="font-size:24px;font-weight:700;color:#10b981">\${fmtEur(totalNasa)}</div>
           <div style="font-size:11px;color:#475569;margin-top:4px">\${totalGross>0?fmt(totalNasa/totalGross*100,1)+'% od gross':'—'} • \${god.broj_rezervacija||0} rez.</div>
+          <div style="margin-top:8px;padding-top:8px;border-top:1px solid #166534">
+            <div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Bez PDV (−20%)</div>
+            <div style="font-size:20px;font-weight:700;color:#34d399">\${fmtEur(totalNasa * 0.80)}</div>
+            <div style="font-size:11px;color:#475569;margin-top:2px">PDV: \${fmtEur(totalNasa * 0.20)}</div>
+          </div>
         </div>
       </div>
 
@@ -1371,7 +1421,8 @@ async function finTab(tab, btn) {
       </div>
 
       <div class="card">
-        <div style="font-weight:600;margin-bottom:12px;font-size:14px;color:#f1f5f9">Mesečni detalji raspodele</div>
+        <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9">Mesečni detalji raspodele</div>
+        <div style="font-size:12px;color:#475569;margin-bottom:12px">Naša marža bez PDV = Naša marža × 0.80 (odbitak 20% PDV)</div>
         <div style="overflow:auto;max-height:320px">
           <table><thead><tr>
             <th>Mesec</th>
@@ -1380,11 +1431,14 @@ async function finTab(tab, btn) {
             <th>Gross marža</th>
             <th style="color:#fcd34d">Komisije agt.</th>
             <th style="color:#6ee7b7">Naša marža</th>
-            <th>Naša marža %</th>
+            <th style="color:#34d399">Bez PDV</th>
+            <th style="color:#f87171">PDV (20%)</th>
           </tr></thead><tbody>
           \${mesecni.map(r=>{
             const gm = parseFloat(r.gross_marza||0)
             const nm = parseFloat(r.nasa_marza||0)
+            const nmBezPdv = nm * 0.80
+            const pdvIznos = nm * 0.20
             const nmPct = gm > 0 ? fmt(nm/gm*100,1) : '—'
             return \`<tr>
               <td style="font-weight:600">\${r.mesec}</td>
@@ -1392,10 +1446,21 @@ async function finTab(tab, btn) {
               <td style="color:#3b82f6">\${fmtEur(r.net_troskovi)}</td>
               <td style="color:#8b5cf6">\${fmtEur(r.gross_marza)}</td>
               <td style="color:#f59e0b;font-weight:600">\${fmtEur(r.komisije_agencijama)}</td>
-              <td style="color:#10b981;font-weight:700">\${fmtEur(r.nasa_marza)}</td>
-              <td style="font-size:12px;color:\${nm>0?'#10b981':'#ef4444'}">\${nmPct}%</td>
+              <td style="color:#10b981;font-weight:700">\${fmtEur(nm)}</td>
+              <td style="color:#34d399;font-weight:700">\${fmtEur(nmBezPdv)}</td>
+              <td style="color:#ef4444;font-size:12px">\${fmtEur(pdvIznos)}</td>
             </tr>\`
           }).join('')}
+          <tr style="background:#0f172a;font-weight:700;border-top:2px solid #334155">
+            <td style="color:#f1f5f9">UKUPNO</td>
+            <td style="color:#10b981">\${fmtEur(totalPrihod)}</td>
+            <td style="color:#3b82f6">\${fmtEur(totalNet)}</td>
+            <td style="color:#8b5cf6">\${fmtEur(totalGross)}</td>
+            <td style="color:#f59e0b">\${fmtEur(totalKom)}</td>
+            <td style="color:#10b981">\${fmtEur(totalNasa)}</td>
+            <td style="color:#34d399">\${fmtEur(totalNasa * 0.80)}</td>
+            <td style="color:#ef4444">\${fmtEur(totalNasa * 0.20)}</td>
+          </tr>
           </tbody></table>
         </div>
       </div>
@@ -1702,23 +1767,28 @@ function agtTab(tab, btn) {
           <i class="fas fa-info-circle mr-1" style="color:#3b82f6"></i>
           <strong style="color:#93c5fd">Gross marža</strong> = Prihod − Net trošak &nbsp;|&nbsp;
           <strong style="color:#fcd34d">Komisija agenciji</strong> = Prihod × % (ili fiksni iznos) &nbsp;|&nbsp;
-          <strong style="color:#6ee7b7">Naša marža</strong> = Gross − Komisija
+          <strong style="color:#6ee7b7">Naša marža</strong> = Gross − Komisija &nbsp;|&nbsp;
+          <strong style="color:#34d399">Bez PDV</strong> = Naša marža × 0.80 (−20% PDV)
         </div>
         <div style="overflow:auto;max-height:580px">
           <table><thead><tr>
             <th>#</th><th>Agencija</th><th>Rez.</th><th>Prihod (EUR)</th>
             <th>Gross marža</th><th style="color:#fcd34d">Komisija agt.</th>
             <th style="color:#6ee7b7">Naša marža</th>
+            <th style="color:#34d399">Bez PDV</th>
             <th>Avg. noć.</th><th>Stopa otk. %</th>
           </tr></thead><tbody>
-          \${rang.map((r,i)=>\`<tr>
+          \${rang.map((r,i)=>{
+            const nm = parseFloat(r.nasa_marza||0)
+            return \`<tr>
             <td style="color:#64748b;font-weight:600">\${i+1}</td>
             <td style="font-weight:600;color:#f1f5f9">\${r.name}</td>
             <td>\${fmtInt(r.rezervacije)}</td>
             <td style="color:#10b981;font-weight:600">\${fmtEur(r.prihod)}</td>
             <td style="color:#8b5cf6">\${fmtEur(r.gross_marza)}</td>
             <td style="color:#f59e0b;font-weight:600">\${fmtEur(r.komisija_agenciji)}</td>
-            <td style="color:#10b981;font-weight:700">\${fmtEur(r.nasa_marza)}</td>
+            <td style="color:#10b981;font-weight:700">\${fmtEur(nm)}</td>
+            <td style="color:#34d399;font-weight:700">\${fmtEur(nm * 0.80)}</td>
             <td>\${r.avg_nocenja?parseFloat(r.avg_nocenja).toFixed(1):'—'}</td>
             <td>
               <div style="display:flex;align-items:center;gap:8px">
@@ -1728,7 +1798,7 @@ function agtTab(tab, btn) {
                 <span style="font-size:12px;color:\${r.stopa_otkazivanja>20?'#ef4444':r.stopa_otkazivanja>10?'#f59e0b':'#10b981'}">\${r.stopa_otkazivanja||0}%</span>
               </div>
             </td>
-          </tr>\`).join('')}
+          </tr>\`}).join('')}
           </tbody></table>
         </div>
       </div>
@@ -1790,9 +1860,12 @@ function agtTab(tab, btn) {
             <th>Prihvaćene</th><th>Ukupan prihod</th>
             <th>Gross marža</th><th style="color:#fcd34d">Komisija agt.</th>
             <th style="color:#6ee7b7">Naša marža</th>
+            <th style="color:#34d399">Bez PDV</th>
             <th>Prosečna vred.</th><th>Poslednja rez.</th>
           </tr></thead><tbody id="agt-tbody">
-          \${lista.map(u=>\`<tr>
+          \${lista.map(u=>{
+            const nm = parseFloat(u.nasa_marza||0)
+            return \`<tr>
             <td style="font-weight:600">\${u.name}</td>
             <td>\${u.is_active?'<span class="badge badge-green">Aktivan</span>':'<span class="badge badge-gray">Neaktivan</span>'}</td>
             <td>\${fmtInt(u.broj_rezervacija)}</td>
@@ -1800,10 +1873,11 @@ function agtTab(tab, btn) {
             <td style="color:#10b981;font-weight:600">\${fmtEur(u.ukupan_prihod)}</td>
             <td style="color:#8b5cf6">\${fmtEur(u.gross_marza)}</td>
             <td style="color:#f59e0b;font-weight:600">\${fmtEur(u.komisija_agenciji)}</td>
-            <td style="color:#10b981;font-weight:700">\${fmtEur(u.nasa_marza)}</td>
+            <td style="color:#10b981;font-weight:700">\${fmtEur(nm)}</td>
+            <td style="color:#34d399;font-weight:700">\${fmtEur(nm * 0.80)}</td>
             <td style="color:#64748b">\${fmtEur(u.prosecna_vrednost)}</td>
             <td style="font-size:12px;color:#64748b">\${u.poslednja_rezervacija?.split('T')[0]||'—'}</td>
-          </tr>\`).join('')}
+          </tr>\`}).join('')}
           </tbody></table>
         </div>
       </div>
