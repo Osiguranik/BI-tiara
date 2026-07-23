@@ -290,6 +290,42 @@ app.get('/api/rezervacije/trend', async (c) => {
   })
 })
 
+app.get('/api/rezervacije/po-statusu', async (c) => {
+  const { from, to } = dateRange(c.req.query('from'), c.req.query('to'))
+  const g = gw(c.env)
+  const status = c.req.query('status') || 'accepted'
+  const limit = parseInt(c.req.query('limit') || '100')
+  const offset = parseInt(c.req.query('offset') || '0')
+
+  const [rows, ukupno] = await Promise.all([
+    query(g, `SELECT r.reference, r.status, r.payment_status,
+                     r.price, r.net_price, r.nights, r.checkin,
+                     r.hotel_name, r.created_at, r.payment_method,
+                     r.commission_type, r.commission_value,
+                     u.name as agencija
+              FROM reservations r
+              LEFT JOIN users u ON u.id = r.user_id
+              WHERE r.is_draft=0 AND r.status=?
+                AND r.created_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
+              ORDER BY r.created_at DESC
+              LIMIT ? OFFSET ?`, [status, from, to, limit, offset]),
+
+    query(g, `SELECT COUNT(*) as total, SUM(price) as ukupno_eur,
+                     AVG(price) as prosecna_cena,
+                     SUM(net_price) as ukupno_net,
+                     AVG(nights) as avg_nocenja
+              FROM reservations
+              WHERE is_draft=0 AND status=?
+                AND created_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)`,
+      [status, from, to]),
+  ])
+
+  return c.json({
+    rows: rows.data?.rows || [],
+    stats: ukupno.data?.rows[0] || {},
+  })
+})
+
 app.get('/api/rezervacije/otkazivanja', async (c) => {
   const { from, to } = dateRange(c.req.query('from'), c.req.query('to'))
   const g = gw(c.env)
@@ -1649,28 +1685,121 @@ async function rezTab(tab, btn) {
 
   else if (tab === 'statusi') {
     const d = window.rezData
+    const statusi = d.statusi || []
+    const plat = d.platni_status || []
+    const ukupnoRez = statusi.reduce((a,r)=>a+parseInt(r.cnt||0),0)
+    const ukupnoVred = statusi.reduce((a,r)=>a+parseFloat(r.vrednost||0),0)
+
+    const STATUS_COLORS = {
+      accepted: '#10b981', rejected: '#ef4444', pending: '#f59e0b',
+      none: '#64748b', cancelled_refund: '#f97316', cancelled_transfer: '#fb923c',
+      cancelled_penalty: '#dc2626', overpayment: '#3b82f6'
+    }
+
     content.innerHTML = \`
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:16px">
+        \${statusi.map(r=>{
+          const col = STATUS_COLORS[r.status]||'#64748b'
+          const pct = ukupnoRez>0?(parseInt(r.cnt)/ukupnoRez*100).toFixed(1):0
+          return \`<div onclick="loadStatusTable('\${r.status}',this)"
+            style="background:#0f172a;border:2px solid \${col}33;border-radius:10px;padding:12px;cursor:pointer;transition:all .2s"
+            class="status-filter-card" data-status="\${r.status}">
+            <div style="font-size:11px;color:#64748b;margin-bottom:4px">\${STATUS_LABELS[r.status]||r.status}</div>
+            <div style="font-size:22px;font-weight:700;color:\${col}">\${fmtInt(r.cnt)}</div>
+            <div style="font-size:11px;color:#475569;margin-top:2px">\${fmtEur(r.vrednost)}</div>
+            <div style="margin-top:6px;height:3px;background:#1e293b;border-radius:2px">
+              <div style="height:100%;width:\${pct}%;background:\${col};border-radius:2px;transition:width .6s"></div>
+            </div>
+            <div style="font-size:10px;color:#475569;margin-top:3px">\${pct}% rezervacija</div>
+          </div>\`
+        }).join('')}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
         <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Status rezervacija</div>
-          <div class="chart-container" style="height:280px"><canvas id="chart-rez-status"></canvas></div>
+          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Broj rezervacija po statusu</div>
+          <div class="chart-container" style="height:240px"><canvas id="chart-rez-status"></canvas></div>
         </div>
         <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Platni status</div>
-          <div class="chart-container" style="height:280px"><canvas id="chart-rez-pay"></canvas></div>
+          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Vrednost po statusu (EUR)</div>
+          <div class="chart-container" style="height:240px"><canvas id="chart-rez-status-vred"></canvas></div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div class="card">
+          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Platni status — broj</div>
+          <div class="chart-container" style="height:220px"><canvas id="chart-rez-pay"></canvas></div>
+        </div>
+        <div class="card">
+          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Platni status — vrednost (EUR)</div>
+          <div class="chart-container" style="height:220px"><canvas id="chart-rez-pay-vred"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card" id="status-table-card" style="display:none">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+          <div>
+            <div style="font-weight:600;font-size:14px;color:#f1f5f9" id="status-table-title">Rezervacije</div>
+            <div style="font-size:12px;color:#64748b;margin-top:2px" id="status-table-sub"></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <input type="text" id="status-search" placeholder="Pretraži..." oninput="filterTable(this,'status-tbody')"
+              style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:6px 12px;font-size:13px;outline:none;width:200px">
+            <button class="btn btn-ghost" onclick="closeStatusTable()" style="font-size:12px">
+              <i class="fas fa-times"></i> Zatvori
+            </button>
+          </div>
+        </div>
+        <div style="overflow:auto;max-height:480px">
+          <table><thead><tr>
+            <th>Reference</th>
+            <th>Agencija</th>
+            <th>Hotel</th>
+            <th>Check-in</th>
+            <th>Noć.</th>
+            <th>Cena (EUR)</th>
+            <th>Net (EUR)</th>
+            <th>Platni status</th>
+            <th>Način plaćanja</th>
+            <th>Datum</th>
+          </tr></thead>
+          <tbody id="status-tbody"></tbody></table>
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;flex-wrap:wrap;gap:8px">
+          <div id="status-pagination-info" style="font-size:12px;color:#64748b"></div>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-ghost" id="btn-prev-page" onclick="statusPage(-1)" style="font-size:12px">
+              <i class="fas fa-chevron-left"></i> Prethodna
+            </button>
+            <button class="btn btn-ghost" id="btn-next-page" onclick="statusPage(1)" style="font-size:12px">
+              Sledeća <i class="fas fa-chevron-right"></i>
+            </button>
+          </div>
         </div>
       </div>
     \`
-    const statusi = d.statusi || []
+
     makeChart('chart-rez-status','doughnut',{
       labels:statusi.map(r=>STATUS_LABELS[r.status]||r.status),
-      datasets:[{data:statusi.map(r=>r.cnt),backgroundColor:COLORS}]
+      datasets:[{data:statusi.map(r=>r.cnt),backgroundColor:statusi.map(r=>STATUS_COLORS[r.status]||'#64748b')}]
     },{plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{size:11}}}}})
-    const plat = d.platni_status || []
+
+    makeChart('chart-rez-status-vred','doughnut',{
+      labels:statusi.map(r=>STATUS_LABELS[r.status]||r.status),
+      datasets:[{data:statusi.map(r=>parseFloat(r.vrednost||0).toFixed(2)),backgroundColor:statusi.map(r=>STATUS_COLORS[r.status]||'#64748b')}]
+    },{plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{size:11}}},tooltip:{callbacks:{label:ctx=>' € '+parseFloat(ctx.raw).toLocaleString('sr-RS',{minimumFractionDigits:2})}}}})
+
+    const PAY_COLORS = ['#10b981','#f59e0b','#64748b','#3b82f6','#8b5cf6']
     makeChart('chart-rez-pay','doughnut',{
       labels:plat.map(r=>PAY_LABELS[r.payment_status]||r.payment_status),
-      datasets:[{data:plat.map(r=>r.cnt),backgroundColor:['#10b981','#f59e0b','#64748b','#3b82f6','#8b5cf6']}]
+      datasets:[{data:plat.map(r=>r.cnt),backgroundColor:PAY_COLORS}]
     },{plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{size:11}}}}})
+
+    makeChart('chart-rez-pay-vred','doughnut',{
+      labels:plat.map(r=>PAY_LABELS[r.payment_status]||r.payment_status),
+      datasets:[{data:plat.map(r=>parseFloat(r.vrednost||0).toFixed(2)),backgroundColor:PAY_COLORS}]
+    },{plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{size:11}}},tooltip:{callbacks:{label:ctx=>' € '+parseFloat(ctx.raw).toLocaleString('sr-RS',{minimumFractionDigits:2})}}}})
   }
 
   else if (tab === 'nocenja') {
@@ -2011,6 +2140,124 @@ function filterTable(input, tbodyId) {
   document.querySelectorAll('#'+tbodyId+' tr').forEach(tr => {
     tr.style.display = tr.textContent.toLowerCase().includes(val) ? '' : 'none'
   })
+}
+
+// ═══════════════════════════════════════════
+// STATUS FILTER TABELA
+// ═══════════════════════════════════════════
+let statusPageState = { status: '', page: 0, pageSize: 25, total: 0 }
+
+async function loadStatusTable(status, cardEl) {
+  // Highlight selektovane kartice
+  document.querySelectorAll('.status-filter-card').forEach(c => {
+    c.style.borderColor = c.dataset.status === status
+      ? (getStatusColor(status) + 'cc')
+      : (getStatusColor(c.dataset.status) + '33')
+    c.style.background = c.dataset.status === status ? '#1e293b' : '#0f172a'
+  })
+
+  statusPageState.status = status
+  statusPageState.page = 0
+
+  const card = document.getElementById('status-table-card')
+  card.style.display = 'block'
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+  document.getElementById('status-table-title').textContent =
+    (STATUS_LABELS[status] || status) + ' — rezervacije'
+  document.getElementById('status-tbody').innerHTML =
+    '<tr><td colspan="10" class="loading"><i class="fas fa-circle-notch spin"></i> Učitavanje...</td></tr>'
+
+  await fetchStatusPage()
+}
+
+async function fetchStatusPage() {
+  const { status, page, pageSize } = statusPageState
+  const offset = page * pageSize
+
+  try {
+    const resp = await axios.get(
+      \`/api/rezervacije/po-statusu?status=\${status}&limit=\${pageSize}&offset=\${offset}&\${dateParams()}\`
+    )
+    const rows = resp.data.rows || []
+    const stats = resp.data.stats || {}
+
+    statusPageState.total = parseInt(stats.total || 0)
+
+    // Subtitle sa agregatima
+    document.getElementById('status-table-sub').innerHTML =
+      \`<span style="color:#10b981;font-weight:600">\${fmtInt(stats.total)} rezervacija</span> &nbsp;•&nbsp;
+       Ukupno: <span style="color:#10b981;font-weight:600">\${fmtEur(stats.ukupno_eur)}</span> &nbsp;•&nbsp;
+       Prosečna cena: <span style="color:#f59e0b">\${fmtEur(stats.prosecna_cena)}</span> &nbsp;•&nbsp;
+       Avg. noćenja: <span style="color:#8b5cf6">\${stats.avg_nocenja ? parseFloat(stats.avg_nocenja).toFixed(1) : '—'}</span>\`
+
+    // Paginacija info
+    const from = offset + 1
+    const to = Math.min(offset + rows.length, statusPageState.total)
+    document.getElementById('status-pagination-info').textContent =
+      \`Prikazano \${from}–\${to} od \${fmtInt(statusPageState.total)} rezervacija\`
+
+    document.getElementById('btn-prev-page').disabled = page === 0
+    document.getElementById('btn-next-page').disabled = to >= statusPageState.total
+
+    // Tabela
+    document.getElementById('status-tbody').innerHTML = rows.length === 0
+      ? '<tr><td colspan="10" style="text-align:center;color:#475569;padding:32px">Nema rezervacija za ovaj status u izabranom periodu</td></tr>'
+      : rows.map(r => {
+          const cena = parseFloat(r.price || 0)
+          const net = parseFloat(r.net_price || 0)
+          const komisija = r.commission_type === 'percent'
+            ? Math.round(cena * (r.commission_value || 0) / 100 * 100) / 100
+            : (r.commission_value || 0)
+          return \`<tr>
+            <td><code style="font-size:11px;color:#60a5fa">\${r.reference || '—'}</code></td>
+            <td style="font-weight:500">\${r.agencija || '—'}</td>
+            <td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\${r.hotel_name||''}">\${r.hotel_name || '—'}</td>
+            <td>\${r.checkin || '—'}</td>
+            <td style="text-align:center">\${r.nights || '—'}</td>
+            <td style="color:#10b981;font-weight:600">\${fmtEur(cena)}</td>
+            <td style="color:#64748b;font-size:12px">\${net > 0 ? fmtEur(net) : '—'}</td>
+            <td>\${payBadge(r.payment_status)}</td>
+            <td style="font-size:12px;color:#94a3b8">\${r.payment_method || '—'}</td>
+            <td style="font-size:12px;color:#64748b">\${r.created_at ? r.created_at.split('T')[0] : '—'}</td>
+          </tr>\`
+        }).join('')
+
+    // Resetuj search
+    const searchEl = document.getElementById('status-search')
+    if (searchEl) searchEl.value = ''
+
+  } catch(e) {
+    document.getElementById('status-tbody').innerHTML =
+      '<tr><td colspan="10" style="color:#ef4444;text-align:center;padding:24px">Greška pri učitavanju podataka</td></tr>'
+  }
+}
+
+async function statusPage(dir) {
+  const newPage = statusPageState.page + dir
+  if (newPage < 0) return
+  const maxPage = Math.ceil(statusPageState.total / statusPageState.pageSize) - 1
+  if (newPage > maxPage) return
+  statusPageState.page = newPage
+  await fetchStatusPage()
+  document.getElementById('status-table-card').scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function closeStatusTable() {
+  document.getElementById('status-table-card').style.display = 'none'
+  document.querySelectorAll('.status-filter-card').forEach(c => {
+    c.style.borderColor = getStatusColor(c.dataset.status) + '33'
+    c.style.background = '#0f172a'
+  })
+}
+
+function getStatusColor(status) {
+  const map = {
+    accepted: '#10b981', rejected: '#ef4444', pending: '#f59e0b',
+    none: '#64748b', cancelled_refund: '#f97316', cancelled_transfer: '#fb923c',
+    cancelled_penalty: '#dc2626', overpayment: '#3b82f6'
+  }
+  return map[status] || '#64748b'
 }
 
 // ═══════════════════════════════════════════
