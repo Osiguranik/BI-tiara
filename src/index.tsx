@@ -35,7 +35,7 @@ app.get('/api/kpi', async (c) => {
   const { from, to } = dateRange(c.req.query('from'), c.req.query('to'))
   const g = gw(c.env)
 
-  const [rezTotal, rezStatus, payments, providerDue] = await Promise.all([
+  const [rezTotal, rezStatus, payments, providerDue, marzaKpi] = await Promise.all([
     query(g, `SELECT COUNT(*) as total, SUM(price) as ukupno_eur, SUM(net_price) as ukupno_net
               FROM reservations
               WHERE is_draft=0 AND created_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)`,
@@ -53,6 +53,23 @@ app.get('/api/kpi', async (c) => {
               FROM provider_invoices pi
               LEFT JOIN provider_invoice_payments pip ON pip.provider_invoice_id = pi.id
               WHERE pi.currency='EUR' AND pip.id IS NULL`, []),
+
+    query(g, `SELECT
+                SUM(price - net_price) as gross_marza,
+                SUM(CASE
+                  WHEN commission_type='percent' THEN ROUND(price * commission_value / 100, 2)
+                  WHEN commission_type='fixed'   THEN commission_value
+                  ELSE 0
+                END) as komisije_agencijama,
+                SUM((price - net_price) - CASE
+                  WHEN commission_type='percent' THEN ROUND(price * commission_value / 100, 2)
+                  WHEN commission_type='fixed'   THEN commission_value
+                  ELSE 0
+                END) as nasa_marza
+              FROM reservations
+              WHERE is_draft=0 AND status='accepted' AND net_price > 0
+                AND created_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)`,
+      [from, to]),
   ])
 
   return c.json({
@@ -60,6 +77,7 @@ app.get('/api/kpi', async (c) => {
     statusi: rezStatus.data?.rows || [],
     placanja: payments.data?.rows[0] || {},
     dugovanje_provajderima: providerDue.data?.rows[0] || {},
+    marza: marzaKpi.data?.rows[0] || {},
   })
 })
 
@@ -89,8 +107,18 @@ app.get('/api/finansije/trend', async (c) => {
               GROUP BY mesec ORDER BY mesec`, [from, to]),
 
     query(g, `SELECT DATE_FORMAT(created_at, '%Y-%m') as mesec,
-                     SUM(price - net_price) as marza_eur,
-                     AVG(CASE WHEN price > 0 THEN (price - net_price)/price*100 ELSE 0 END) as marza_pct
+                     SUM(price - net_price) as gross_marza,
+                     SUM(CASE
+                       WHEN commission_type='percent' THEN ROUND(price * commission_value / 100, 2)
+                       WHEN commission_type='fixed'   THEN commission_value
+                       ELSE 0
+                     END) as komisije_agencijama,
+                     SUM((price - net_price) - CASE
+                       WHEN commission_type='percent' THEN ROUND(price * commission_value / 100, 2)
+                       WHEN commission_type='fixed'   THEN commission_value
+                       ELSE 0
+                     END) as nasa_marza,
+                     AVG(CASE WHEN price > 0 THEN (price - net_price)/price*100 ELSE 0 END) as gross_marza_pct
               FROM reservations
               WHERE is_draft=0 AND status='accepted' AND net_price > 0
                 AND created_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
@@ -154,6 +182,58 @@ app.get('/api/finansije/kurs', async (c) => {
   const result = await query(g,
     `SELECT date, value FROM exchange_rates ORDER BY date DESC LIMIT 90`)
   return c.json(result.data?.rows || [])
+})
+
+app.get('/api/finansije/raspodela-marze', async (c) => {
+  const { from, to } = dateRange(c.req.query('from'), c.req.query('to'))
+  const g = gw(c.env)
+
+  const [mesecni, godisnji] = await Promise.all([
+    query(g, `SELECT DATE_FORMAT(created_at, '%Y-%m') as mesec,
+                     SUM(net_price) as net_troskovi,
+                     SUM(CASE
+                       WHEN commission_type='percent' THEN ROUND(price * commission_value / 100, 2)
+                       WHEN commission_type='fixed'   THEN commission_value
+                       ELSE 0
+                     END) as komisije_agencijama,
+                     SUM((price - net_price) - CASE
+                       WHEN commission_type='percent' THEN ROUND(price * commission_value / 100, 2)
+                       WHEN commission_type='fixed'   THEN commission_value
+                       ELSE 0
+                     END) as nasa_marza,
+                     SUM(price) as ukupan_prihod,
+                     SUM(price - net_price) as gross_marza
+              FROM reservations
+              WHERE is_draft=0 AND status='accepted' AND net_price > 0
+                AND created_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)
+              GROUP BY mesec ORDER BY mesec`,
+      [from, to]),
+
+    query(g, `SELECT
+                SUM(net_price) as net_troskovi,
+                SUM(CASE
+                  WHEN commission_type='percent' THEN ROUND(price * commission_value / 100, 2)
+                  WHEN commission_type='fixed'   THEN commission_value
+                  ELSE 0
+                END) as komisije_agencijama,
+                SUM((price - net_price) - CASE
+                  WHEN commission_type='percent' THEN ROUND(price * commission_value / 100, 2)
+                  WHEN commission_type='fixed'   THEN commission_value
+                  ELSE 0
+                END) as nasa_marza,
+                SUM(price) as ukupan_prihod,
+                SUM(price - net_price) as gross_marza,
+                COUNT(*) as broj_rezervacija
+              FROM reservations
+              WHERE is_draft=0 AND status='accepted' AND net_price > 0
+                AND created_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)`,
+      [from, to]),
+  ])
+
+  return c.json({
+    mesecni: mesecni.data?.rows || [],
+    godisnji: godisnji.data?.rows[0] || {},
+  })
 })
 
 // ─────────────────────────────────────────────
@@ -257,6 +337,17 @@ app.get('/api/agencije/lista', async (c) => {
             SUM(CASE WHEN r.status LIKE 'cancelled%' THEN 1 ELSE 0 END) as otkazane,
             SUM(r.price) as ukupan_prihod,
             AVG(r.price) as prosecna_vrednost,
+            SUM(r.price - r.net_price) as gross_marza,
+            SUM(CASE
+              WHEN r.commission_type='percent' THEN ROUND(r.price * r.commission_value / 100, 2)
+              WHEN r.commission_type='fixed'   THEN r.commission_value
+              ELSE 0
+            END) as komisija_agenciji,
+            SUM((r.price - r.net_price) - CASE
+              WHEN r.commission_type='percent' THEN ROUND(r.price * r.commission_value / 100, 2)
+              WHEN r.commission_type='fixed'   THEN r.commission_value
+              ELSE 0
+            END) as nasa_marza,
             MAX(r.created_at) as poslednja_rezervacija
      FROM users u
      LEFT JOIN reservations r ON r.user_id=u.id AND r.is_draft=0
@@ -318,7 +409,17 @@ app.get('/api/agencije/rang', async (c) => {
     `SELECT u.name,
             COUNT(r.id) as rezervacije,
             SUM(r.price) as prihod,
-            SUM(r.price - r.net_price) as marza,
+            SUM(r.price - r.net_price) as gross_marza,
+            SUM(CASE
+              WHEN r.commission_type='percent' THEN ROUND(r.price * r.commission_value / 100, 2)
+              WHEN r.commission_type='fixed'   THEN r.commission_value
+              ELSE 0
+            END) as komisija_agenciji,
+            SUM((r.price - r.net_price) - CASE
+              WHEN r.commission_type='percent' THEN ROUND(r.price * r.commission_value / 100, 2)
+              WHEN r.commission_type='fixed'   THEN r.commission_value
+              ELSE 0
+            END) as nasa_marza,
             AVG(r.nights) as avg_nocenja,
             SUM(CASE WHEN r.status LIKE 'cancelled%' THEN 1 ELSE 0 END) as otkazivanja,
             ROUND(SUM(CASE WHEN r.status LIKE 'cancelled%' THEN 1 ELSE 0 END)*100.0/COUNT(*),1) as stopa_otkazivanja
@@ -840,6 +941,18 @@ pregled: async () => {
         <div style="font-size:28px;font-weight:700;color:#ef4444">\${fmtInt(otkazane + parseInt(odbijene))}</div>
         <div style="font-size:12px;color:#64748b;margin-top:4px">\${otkazane} otkazano, \${odbijene} odbijeno</div>
       </div>
+      <div class="kpi-card" style="background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid #334155;border-radius:12px;padding:20px;position:relative;overflow:hidden;">
+        <div style="content:'';position:absolute;top:-30px;right:-30px;width:100px;height:100px;border-radius:50%;opacity:.1;background:#10b981"></div>
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-chart-pie mr-1"></i> Naša marža (neto)</div>
+        <div style="font-size:22px;font-weight:700;color:#10b981">\${fmtEur(d.marza?.nasa_marza)}</div>
+        <div style="font-size:12px;color:#64748b;margin-top:4px">Gross: \${fmtEur(d.marza?.gross_marza)}</div>
+      </div>
+      <div class="kpi-card" style="background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid #334155;border-radius:12px;padding:20px;position:relative;overflow:hidden;">
+        <div style="content:'';position:absolute;top:-30px;right:-30px;width:100px;height:100px;border-radius:50%;opacity:.1;background:#f59e0b"></div>
+        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-handshake mr-1"></i> Komisije agencijama</div>
+        <div style="font-size:22px;font-weight:700;color:#f59e0b">\${fmtEur(d.marza?.komisije_agencijama)}</div>
+        <div style="font-size:12px;color:#64748b;margin-top:4px">\${d.marza?.gross_marza>0?fmt(d.marza.komisije_agencijama/d.marza.gross_marza*100,1)+'% od gross marže':'—'}</div>
+      </div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
@@ -906,6 +1019,7 @@ finansije: async () => {
   document.getElementById('module-content').innerHTML = \`
     <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap">
       <button class="tab active" onclick="finTab('prihodi',this)">Prihodi & Marža</button>
+      <button class="tab" onclick="finTab('raspodela',this)">🎯 Raspodela marže</button>
       <button class="tab" onclick="finTab('naplate',this)">Naplate</button>
       <button class="tab" onclick="finTab('obroci',this)">Obroci plaćanja</button>
       <button class="tab" onclick="finTab('bankovni',this)">Bankovni izvodi</button>
@@ -1114,54 +1228,190 @@ async function finTab(tab, btn) {
     const d = window.finData
     const prihodi = d.prihodi || []
     const marza = d.marza || []
+    const totalPrihod = prihodi.reduce((a,r)=>a+parseFloat(r.prihod_eur||0),0)
+    const totalNet = prihodi.reduce((a,r)=>a+parseFloat(r.net_eur||0),0)
+    const totalGross = marza.reduce((a,r)=>a+parseFloat(r.gross_marza||0),0)
+    const totalKomisije = marza.reduce((a,r)=>a+parseFloat(r.komisije_agencijama||0),0)
+    const totalNasaMarza = marza.reduce((a,r)=>a+parseFloat(r.nasa_marza||0),0)
+    const avgGrossPct = marza.reduce((a,r)=>a+parseFloat(r.gross_marza_pct||0),0)/Math.max(marza.length,1)
     content.innerHTML = \`
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:20px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px;margin-bottom:20px">
         <div class="kpi-card kpi-green">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px">Ukupan prihod</div>
-          <div style="font-size:24px;font-weight:700;color:#10b981">\${fmtEur(prihodi.reduce((a,r)=>a+parseFloat(r.prihod_eur||0),0))}</div>
+          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-euro-sign mr-1"></i>Ukupan prihod</div>
+          <div style="font-size:22px;font-weight:700;color:#10b981">\${fmtEur(totalPrihod)}</div>
+          <div style="font-size:11px;color:#475569;margin-top:4px">svi prihodi</div>
         </div>
         <div class="kpi-card kpi-blue">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px">Net troškovi</div>
-          <div style="font-size:24px;font-weight:700;color:#3b82f6">\${fmtEur(prihodi.reduce((a,r)=>a+parseFloat(r.net_eur||0),0))}</div>
+          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-building mr-1"></i>Net troškovi</div>
+          <div style="font-size:22px;font-weight:700;color:#3b82f6">\${fmtEur(totalNet)}</div>
+          <div style="font-size:11px;color:#475569;margin-top:4px">\${totalPrihod>0?fmt(totalNet/totalPrihod*100,1)+'% od prihoda':'—'}</div>
         </div>
         <div class="kpi-card kpi-purple">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px">Ukupna marža</div>
-          <div style="font-size:24px;font-weight:700;color:#8b5cf6">\${fmtEur(marza.reduce((a,r)=>a+parseFloat(r.marza_eur||0),0))}</div>
+          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-layer-group mr-1"></i>Gross marža</div>
+          <div style="font-size:22px;font-weight:700;color:#8b5cf6">\${fmtEur(totalGross)}</div>
+          <div style="font-size:11px;color:#475569;margin-top:4px">\${avgGrossPct.toFixed(1)}% avg</div>
         </div>
         <div class="kpi-card kpi-yellow">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px">Prosečna marža %</div>
-          <div style="font-size:24px;font-weight:700;color:#f59e0b">\${fmt(marza.reduce((a,r)=>a+parseFloat(r.marza_pct||0),0)/Math.max(marza.length,1), 1)}%</div>
+          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-handshake mr-1"></i>Komisije agencijama</div>
+          <div style="font-size:22px;font-weight:700;color:#f59e0b">\${fmtEur(totalKomisije)}</div>
+          <div style="font-size:11px;color:#475569;margin-top:4px">\${totalGross>0?fmt(totalKomisije/totalGross*100,1)+'% od gross':'—'}</div>
+        </div>
+        <div class="kpi-card" style="background:linear-gradient(135deg,#052e16,#0f172a);border:1px solid #166534;border-radius:12px;padding:20px">
+          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-star mr-1" style="color:#10b981"></i>NAŠA MARŽA</div>
+          <div style="font-size:22px;font-weight:700;color:#10b981">\${fmtEur(totalNasaMarza)}</div>
+          <div style="font-size:11px;color:#475569;margin-top:4px">\${totalGross>0?fmt(totalNasaMarza/totalGross*100,1)+'% od gross':'—'}</div>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
         <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Prihod i Net troškovi (EUR)</div>
+          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-bar mr-2" style="color:#3b82f6"></i>Prihod i Net troškovi (EUR)</div>
           <div class="chart-container" style="height:260px"><canvas id="chart-fin-prihodi"></canvas></div>
         </div>
         <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Marža po mesecima</div>
+          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-bar mr-2" style="color:#8b5cf6"></i>Gross marža po mesecima</div>
           <div class="chart-container" style="height:260px"><canvas id="chart-fin-marza"></canvas></div>
         </div>
+      </div>
+      <div class="card">
+        <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-layer-group mr-2" style="color:#10b981"></i>Raspodela marže po mesecima — 3 sloja</div>
+        <div style="font-size:12px;color:#475569;margin-bottom:16px">Naša marža (zeleno) + Komisije agencijama (žuto) = Gross marža. Donji sloj je Net trošak.</div>
+        <div class="chart-container" style="height:300px"><canvas id="chart-fin-stacked"></canvas></div>
       </div>
     \`
     makeChart('chart-fin-prihodi', 'bar', {
       labels: prihodi.map(r=>r.mesec),
       datasets: [
-        { label:'Prihod (EUR)', data:prihodi.map(r=>r.prihod_eur), backgroundColor:'#10b981' },
-        { label:'Net (EUR)', data:prihodi.map(r=>r.net_eur), backgroundColor:'#3b82f6' }
+        { label:'Prihod (EUR)', data:prihodi.map(r=>r.prihod_eur), backgroundColor:'rgba(16,185,129,0.8)' },
+        { label:'Net trošak (EUR)', data:prihodi.map(r=>r.net_eur), backgroundColor:'rgba(59,130,246,0.8)' }
       ]
     })
     makeChart('chart-fin-marza', 'bar', {
       labels: marza.map(r=>r.mesec),
       datasets: [
-        { label:'Marža (EUR)', data:marza.map(r=>r.marza_eur), backgroundColor:'#8b5cf6', yAxisID:'y' },
-        { label:'Marža %', data:marza.map(r=>parseFloat(r.marza_pct||0).toFixed(2)), borderColor:'#f59e0b', type:'line', yAxisID:'y1', tension:.4 }
+        { label:'Gross marža (EUR)', data:marza.map(r=>r.gross_marza), backgroundColor:'rgba(139,92,246,0.8)', yAxisID:'y' },
+        { label:'Gross marža %', data:marza.map(r=>parseFloat(r.gross_marza_pct||0).toFixed(2)), borderColor:'#f59e0b', type:'line', yAxisID:'y1', tension:.4 }
       ]
     }, { scales: {
       x:{grid:{color:'#1e293b'},ticks:{color:'#64748b'}},
       y:{grid:{color:'#1e293b'},ticks:{color:'#64748b'}},
       y1:{position:'right',grid:{drawOnChartArea:false},ticks:{color:'#f59e0b',callback:v=>v+'%'}}
     }})
+    // Stacked bar: net_troskovi + komisije + nasa_marza
+    makeChart('chart-fin-stacked', 'bar', {
+      labels: marza.map(r=>r.mesec),
+      datasets: [
+        { label:'Net trošak', data:prihodi.map(r=>r.net_eur||0), backgroundColor:'rgba(59,130,246,0.75)', stack:'stack' },
+        { label:'Komisije agencijama', data:marza.map(r=>r.komisije_agencijama||0), backgroundColor:'rgba(245,158,11,0.85)', stack:'stack' },
+        { label:'Naša marža', data:marza.map(r=>r.nasa_marza||0), backgroundColor:'rgba(16,185,129,0.9)', stack:'stack' },
+      ]
+    }, { scales: {
+      x:{stacked:true,grid:{color:'#1e293b'},ticks:{color:'#64748b'}},
+      y:{stacked:true,grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:v=>'€'+v.toLocaleString()}}
+    }})
+  }
+
+  else if (tab === 'raspodela') {
+    const rData = (await axios.get(\`/api/finansije/raspodela-marze?\${dateParams()}\`)).data
+    const mesecni = rData.mesecni || []
+    const god = rData.godisnji || {}
+    const totalPrihod = parseFloat(god.ukupan_prihod||0)
+    const totalNet = parseFloat(god.net_troskovi||0)
+    const totalGross = parseFloat(god.gross_marza||0)
+    const totalKom = parseFloat(god.komisije_agencijama||0)
+    const totalNasa = parseFloat(god.nasa_marza||0)
+    content.innerHTML = \`
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px">
+        <div class="kpi-card kpi-green">
+          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-euro-sign mr-1"></i>Ukupan prihod</div>
+          <div style="font-size:22px;font-weight:700;color:#10b981">\${fmtEur(totalPrihod)}</div>
+          <div style="font-size:11px;color:#475569;margin-top:4px">100% prihoda</div>
+        </div>
+        <div class="kpi-card kpi-blue">
+          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-building mr-1"></i>Net troškovi</div>
+          <div style="font-size:22px;font-weight:700;color:#3b82f6">\${fmtEur(totalNet)}</div>
+          <div style="font-size:11px;color:#475569;margin-top:4px">\${totalPrihod>0?fmt(totalNet/totalPrihod*100,1)+'% od prihoda':'—'}</div>
+        </div>
+        <div class="kpi-card kpi-purple">
+          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-layer-group mr-1"></i>Gross marža</div>
+          <div style="font-size:22px;font-weight:700;color:#8b5cf6">\${fmtEur(totalGross)}</div>
+          <div style="font-size:11px;color:#475569;margin-top:4px">\${totalPrihod>0?fmt(totalGross/totalPrihod*100,1)+'% od prihoda':'—'}</div>
+        </div>
+        <div class="kpi-card kpi-yellow">
+          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-handshake mr-1"></i>Komisije agencijama</div>
+          <div style="font-size:22px;font-weight:700;color:#f59e0b">\${fmtEur(totalKom)}</div>
+          <div style="font-size:11px;color:#475569;margin-top:4px">\${totalGross>0?fmt(totalKom/totalGross*100,1)+'% od gross':'—'}</div>
+        </div>
+        <div class="kpi-card" style="background:linear-gradient(135deg,#052e16,#0f172a);border:2px solid #166534;border-radius:12px;padding:20px">
+          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-star mr-1" style="color:#10b981"></i>NAŠA MARŽA</div>
+          <div style="font-size:24px;font-weight:700;color:#10b981">\${fmtEur(totalNasa)}</div>
+          <div style="font-size:11px;color:#475569;margin-top:4px">\${totalGross>0?fmt(totalNasa/totalGross*100,1)+'% od gross':'—'} • \${god.broj_rezervacija||0} rez.</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">
+        <div class="card">
+          <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-layer-group mr-2" style="color:#10b981"></i>Raspodela svakog EUR prihoda po mesecima</div>
+          <div style="font-size:12px;color:#475569;margin-bottom:14px">Stacked = Net trošak (plavo) + Komisije agencijama (žuto) + Naša marža (zeleno)</div>
+          <div class="chart-container" style="height:300px"><canvas id="chart-rasp-stack"></canvas></div>
+        </div>
+        <div class="card" style="display:flex;flex-direction:column;justify-content:center;align-items:center">
+          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9;text-align:center">Ukupna raspodela prihoda</div>
+          <div class="chart-container" style="height:240px;width:240px"><canvas id="chart-rasp-donut"></canvas></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div style="font-weight:600;margin-bottom:12px;font-size:14px;color:#f1f5f9">Mesečni detalji raspodele</div>
+        <div style="overflow:auto;max-height:320px">
+          <table><thead><tr>
+            <th>Mesec</th>
+            <th>Ukupan prihod</th>
+            <th>Net trošak</th>
+            <th>Gross marža</th>
+            <th style="color:#fcd34d">Komisije agt.</th>
+            <th style="color:#6ee7b7">Naša marža</th>
+            <th>Naša marža %</th>
+          </tr></thead><tbody>
+          \${mesecni.map(r=>{
+            const gm = parseFloat(r.gross_marza||0)
+            const nm = parseFloat(r.nasa_marza||0)
+            const nmPct = gm > 0 ? fmt(nm/gm*100,1) : '—'
+            return \`<tr>
+              <td style="font-weight:600">\${r.mesec}</td>
+              <td style="color:#10b981">\${fmtEur(r.ukupan_prihod)}</td>
+              <td style="color:#3b82f6">\${fmtEur(r.net_troskovi)}</td>
+              <td style="color:#8b5cf6">\${fmtEur(r.gross_marza)}</td>
+              <td style="color:#f59e0b;font-weight:600">\${fmtEur(r.komisije_agencijama)}</td>
+              <td style="color:#10b981;font-weight:700">\${fmtEur(r.nasa_marza)}</td>
+              <td style="font-size:12px;color:\${nm>0?'#10b981':'#ef4444'}">\${nmPct}%</td>
+            </tr>\`
+          }).join('')}
+          </tbody></table>
+        </div>
+      </div>
+    \`
+    // Stacked bar
+    makeChart('chart-rasp-stack','bar',{
+      labels: mesecni.map(r=>r.mesec),
+      datasets:[
+        { label:'Net trošak', data:mesecni.map(r=>r.net_troskovi||0), backgroundColor:'rgba(59,130,246,0.75)', stack:'s' },
+        { label:'Komisije agencijama', data:mesecni.map(r=>r.komisije_agencijama||0), backgroundColor:'rgba(245,158,11,0.85)', stack:'s' },
+        { label:'Naša marža', data:mesecni.map(r=>r.nasa_marza||0), backgroundColor:'rgba(16,185,129,0.9)', stack:'s' },
+      ]
+    },{scales:{
+      x:{stacked:true,grid:{color:'#1e293b'},ticks:{color:'#64748b'}},
+      y:{stacked:true,grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:v=>'€'+v.toLocaleString()}}
+    }})
+    // Donut ukupna raspodela
+    makeChart('chart-rasp-donut','doughnut',{
+      labels:['Net trošak','Komisije agencijama','Naša marža'],
+      datasets:[{
+        data:[totalNet, totalKom, totalNasa],
+        backgroundColor:['rgba(59,130,246,0.85)','rgba(245,158,11,0.85)','rgba(16,185,129,0.9)'],
+        borderColor:['#3b82f6','#f59e0b','#10b981'],
+        borderWidth:2
+      }]
+    },{plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:11}}}}})
   }
 
   else if (tab === 'naplate') {
@@ -1438,22 +1688,31 @@ function agtTab(tab, btn) {
     const rang = d.rang || []
     content.innerHTML = \`
       <div class="card">
-        <div style="overflow:auto;max-height:600px">
+        <div style="font-size:12px;color:#475569;margin-bottom:12px;padding:8px 12px;background:#0f172a;border-radius:8px;border:1px solid #1e3a5f">
+          <i class="fas fa-info-circle mr-1" style="color:#3b82f6"></i>
+          <strong style="color:#93c5fd">Gross marža</strong> = Prihod − Net trošak &nbsp;|&nbsp;
+          <strong style="color:#fcd34d">Komisija agenciji</strong> = Prihod × % (ili fiksni iznos) &nbsp;|&nbsp;
+          <strong style="color:#6ee7b7">Naša marža</strong> = Gross − Komisija
+        </div>
+        <div style="overflow:auto;max-height:580px">
           <table><thead><tr>
-            <th>#</th><th>Agencija</th><th>Rezervacije</th><th>Prihod (EUR)</th>
-            <th>Marža (EUR)</th><th>Avg. noćenja</th><th>Otkazivanja</th><th>Stopa otk. %</th>
+            <th>#</th><th>Agencija</th><th>Rez.</th><th>Prihod (EUR)</th>
+            <th>Gross marža</th><th style="color:#fcd34d">Komisija agt.</th>
+            <th style="color:#6ee7b7">Naša marža</th>
+            <th>Avg. noć.</th><th>Stopa otk. %</th>
           </tr></thead><tbody>
           \${rang.map((r,i)=>\`<tr>
             <td style="color:#64748b;font-weight:600">\${i+1}</td>
             <td style="font-weight:600;color:#f1f5f9">\${r.name}</td>
             <td>\${fmtInt(r.rezervacije)}</td>
             <td style="color:#10b981;font-weight:600">\${fmtEur(r.prihod)}</td>
-            <td style="color:#8b5cf6">\${fmtEur(r.marza)}</td>
+            <td style="color:#8b5cf6">\${fmtEur(r.gross_marza)}</td>
+            <td style="color:#f59e0b;font-weight:600">\${fmtEur(r.komisija_agenciji)}</td>
+            <td style="color:#10b981;font-weight:700">\${fmtEur(r.nasa_marza)}</td>
             <td>\${r.avg_nocenja?parseFloat(r.avg_nocenja).toFixed(1):'—'}</td>
-            <td style="color:\${r.otkazivanja>0?'#ef4444':'#64748b'}">\${fmtInt(r.otkazivanja)}</td>
             <td>
               <div style="display:flex;align-items:center;gap:8px">
-                <div class="progress-bar" style="width:80px">
+                <div class="progress-bar" style="width:60px">
                   <div class="progress-fill" style="width:\${Math.min(parseFloat(r.stopa_otkazivanja||0)*3,100)}%;background:\${r.stopa_otkazivanja>20?'#ef4444':r.stopa_otkazivanja>10?'#f59e0b':'#10b981'}"></div>
                 </div>
                 <span style="font-size:12px;color:\${r.stopa_otkazivanja>20?'#ef4444':r.stopa_otkazivanja>10?'#f59e0b':'#10b981'}">\${r.stopa_otkazivanja||0}%</span>
@@ -1469,25 +1728,41 @@ function agtTab(tab, btn) {
   else if (tab === 'grafikon') {
     const top15 = (d.rang||[]).slice(0,15)
     content.innerHTML = \`
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
         <div class="card">
           <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Top 15 agencija — Prihod (EUR)</div>
-          <div class="chart-container" style="height:450px"><canvas id="chart-agt-prihod"></canvas></div>
+          <div class="chart-container" style="height:420px"><canvas id="chart-agt-prihod"></canvas></div>
         </div>
         <div class="card">
           <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Top 15 agencija — Rezervacije</div>
-          <div class="chart-container" style="height:450px"><canvas id="chart-agt-rez"></canvas></div>
+          <div class="chart-container" style="height:420px"><canvas id="chart-agt-rez"></canvas></div>
         </div>
       </div>
+      <div class="card">
+        <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-layer-group mr-2" style="color:#10b981"></i>Naša marža vs Komisije agencijama — Top 15</div>
+        <div style="font-size:12px;color:#475569;margin-bottom:14px">Stacked bar: zeleno = naša marža, žuto = komisije agencijama</div>
+        <div class="chart-container" style="height:380px"><canvas id="chart-agt-marza-stack"></canvas></div>
+      </div>
     \`
+    const labels15 = top15.map(r=>r.name.length>22?r.name.substring(0,22)+'…':r.name)
     makeChart('chart-agt-prihod','bar',{
-      labels:top15.map(r=>r.name.length>20?r.name.substring(0,20)+'…':r.name),
+      labels:labels15,
       datasets:[{label:'Prihod (EUR)',data:top15.map(r=>r.prihod),backgroundColor:COLORS}]
     },{indexAxis:'y'})
     makeChart('chart-agt-rez','bar',{
-      labels:top15.map(r=>r.name.length>20?r.name.substring(0,20)+'…':r.name),
+      labels:labels15,
       datasets:[{label:'Rezervacije',data:top15.map(r=>r.rezervacije),backgroundColor:'#3b82f6'}]
     },{indexAxis:'y'})
+    makeChart('chart-agt-marza-stack','bar',{
+      labels:labels15,
+      datasets:[
+        { label:'Naša marža', data:top15.map(r=>r.nasa_marza||0), backgroundColor:'rgba(16,185,129,0.85)', stack:'s' },
+        { label:'Komisije agencijama', data:top15.map(r=>r.komisija_agenciji||0), backgroundColor:'rgba(245,158,11,0.85)', stack:'s' },
+      ]
+    },{indexAxis:'y', scales:{
+      x:{stacked:true,grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:v=>'€'+v.toLocaleString()}},
+      y:{stacked:true,grid:{color:'#1e293b'},ticks:{color:'#64748b'}}
+    }})
   }
 
   else if (tab === 'tabela') {
@@ -1501,18 +1776,22 @@ function agtTab(tab, btn) {
         </div>
         <div style="overflow:auto;max-height:500px">
           <table><thead><tr>
-            <th>Agencija</th><th>Email</th><th>Status</th><th>Rezervacije</th>
-            <th>Prihvaćene</th><th>Otkazane</th><th>Ukupan prihod</th><th>Prosečna vrednost</th><th>Poslednja rez.</th>
+            <th>Agencija</th><th>Status</th><th>Rez.</th>
+            <th>Prihvaćene</th><th>Ukupan prihod</th>
+            <th>Gross marža</th><th style="color:#fcd34d">Komisija agt.</th>
+            <th style="color:#6ee7b7">Naša marža</th>
+            <th>Prosečna vred.</th><th>Poslednja rez.</th>
           </tr></thead><tbody id="agt-tbody">
           \${lista.map(u=>\`<tr>
             <td style="font-weight:600">\${u.name}</td>
-            <td style="font-size:12px;color:#64748b">\${u.email||'—'}</td>
             <td>\${u.is_active?'<span class="badge badge-green">Aktivan</span>':'<span class="badge badge-gray">Neaktivan</span>'}</td>
             <td>\${fmtInt(u.broj_rezervacija)}</td>
             <td style="color:#10b981">\${fmtInt(u.prihvacene)}</td>
-            <td style="color:#ef4444">\${fmtInt(u.otkazane)}</td>
             <td style="color:#10b981;font-weight:600">\${fmtEur(u.ukupan_prihod)}</td>
-            <td>\${fmtEur(u.prosecna_vrednost)}</td>
+            <td style="color:#8b5cf6">\${fmtEur(u.gross_marza)}</td>
+            <td style="color:#f59e0b;font-weight:600">\${fmtEur(u.komisija_agenciji)}</td>
+            <td style="color:#10b981;font-weight:700">\${fmtEur(u.nasa_marza)}</td>
+            <td style="color:#64748b">\${fmtEur(u.prosecna_vrednost)}</td>
             <td style="font-size:12px;color:#64748b">\${u.poslednja_rezervacija?.split('T')[0]||'—'}</td>
           </tr>\`).join('')}
           </tbody></table>
