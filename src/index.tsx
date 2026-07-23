@@ -36,7 +36,11 @@ app.get('/api/kpi', async (c) => {
   const g = gw(c.env)
 
   const [rezTotal, rezStatus, payments, providerDue, marzaKpi] = await Promise.all([
-    query(g, `SELECT COUNT(*) as total, SUM(price) as ukupno_eur, SUM(net_price) as ukupno_net
+    query(g, `SELECT
+                COUNT(*) as total,
+                SUM(CASE WHEN status='accepted' THEN price ELSE 0 END) as ukupno_eur,
+                SUM(CASE WHEN status='accepted' THEN net_price ELSE 0 END) as ukupno_net,
+                COUNT(CASE WHEN status='accepted' THEN 1 END) as prihvacene_cnt
               FROM reservations
               WHERE is_draft=0 AND created_at BETWEEN ? AND DATE_ADD(?, INTERVAL 1 DAY)`,
       [from, to]),
@@ -930,7 +934,7 @@ pregled: async () => {
       <div class="kpi-card kpi-green">
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-euro-sign mr-1"></i> Ukupan prihod</div>
         <div style="font-size:24px;font-weight:700;color:#10b981">\${fmtEur(d.rezervacije?.ukupno_eur)}</div>
-        <div style="font-size:12px;color:#64748b;margin-top:4px">vrednost rezervacija</div>
+        <div style="font-size:12px;color:#64748b;margin-top:4px">samo prihvaćene (\${fmtInt(d.rezervacije?.prihvacene_cnt)})</div>
       </div>
       <div class="kpi-card kpi-purple">
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-check-circle mr-1"></i> Naplaćeno (EUR)</div>
@@ -940,7 +944,7 @@ pregled: async () => {
       <div class="kpi-card kpi-yellow">
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-check-double mr-1"></i> Prihvaćene rez.</div>
         <div style="font-size:28px;font-weight:700;color:#f59e0b">\${fmtInt(prihvacene)}</div>
-        <div style="font-size:12px;color:#64748b;margin-top:4px">od ukupno \${fmtInt(d.rezervacije?.total)}</div>
+        <div style="font-size:12px;color:#64748b;margin-top:4px">od \${fmtInt(d.rezervacije?.total)} kreiranih</div>
       </div>
       <div class="kpi-card kpi-red">
         <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-times-circle mr-1"></i> Otkazano / Odbijeno</div>
