@@ -632,9 +632,9 @@ const html = `<!DOCTYPE html>
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: #1e293b; }
   ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
-  .sidebar { width: 240px; min-height: 100vh; background: #1e293b; border-right: 1px solid #334155; position: fixed; top: 0; left: 0; z-index: 100; transition: transform .3s; }
+  .sidebar { width: 240px; min-height: 100vh; background: #252d3a; border-right: 1px solid #2f3a4a; position: fixed; top: 0; left: 0; z-index: 100; transition: transform .3s; }
   .sidebar-link { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 8px; cursor: pointer; transition: all .2s; font-size: 14px; color: #94a3b8; margin: 2px 8px; }
-  .sidebar-link:hover { background: #334155; color: #e2e8f0; }
+  .sidebar-link:hover { background: #2f3a4a; color: #e2e8f0; }
   .sidebar-link.active { background: #3b82f6; color: #fff; }
   .main { margin-left: 240px; padding: 24px; min-height: 100vh; }
   .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; }
@@ -672,7 +672,7 @@ const html = `<!DOCTYPE html>
   .progress-bar { height:6px; background:#1e293b; border-radius:3px; overflow:hidden; }
   .progress-fill { height:100%; background: linear-gradient(90deg, #3b82f6, #8b5cf6); border-radius:3px; transition: width .6s ease; }
   .tooltip-custom { position:absolute; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:8px 12px; font-size:12px; pointer-events:none; z-index:999; }
-  @media(max-width:768px) { .sidebar{transform:translateX(-100%);} .sidebar.open{transform:translateX(0);} .main{margin-left:0;} }
+  @media(max-width:768px) { .sidebar{transform:translateX(-100%);background:#252d3a;} .sidebar.open{transform:translateX(0);} .main{margin-left:0;} }
 </style>
 </head>
 <body>
