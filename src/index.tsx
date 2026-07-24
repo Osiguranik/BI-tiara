@@ -469,7 +469,7 @@ app.get('/api/agencije/rang', async (c) => {
      WHERE u.role='agent'
      GROUP BY u.id, u.name
      ORDER BY prihod DESC
-     LIMIT 30`, [from, to])
+     LIMIT 500`, [from, to])
 
   return c.json(result.data?.rows || [])
 })
