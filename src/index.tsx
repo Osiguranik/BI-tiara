@@ -774,10 +774,8 @@ const html = `<!DOCTYPE html>
       <!-- Brzi filteri -->
       <div style="display:flex;gap:4px;background:#1e293b;padding:4px;border-radius:10px">
         <button class="tab active" id="quick-mtd" onclick="setCurrentMonth(this)">Ovaj mesec</button>
-        <button class="tab" id="quick-30d" onclick="setQuickDate(30, this)">30 dana</button>
-        <button class="tab" id="quick-90d" onclick="setQuickDate(90, this)">3 mes.</button>
-        <button class="tab" id="quick-180d" onclick="setQuickDate(180, this)">6 mes.</button>
-        <button class="tab" id="quick-1y" onclick="setQuickDate(365, this)">1 god.</button>
+        <button class="tab" id="quick-lm" onclick="setLastMonth(this)">Prošli mesec</button>
+        <button class="tab" id="quick-ytd" onclick="setCurrentYear(this)">Ova godina</button>
       </div>
       <input type="date" id="date-from" onchange="onDateChange()">
       <span style="color:#475569">—</span>
@@ -819,14 +817,25 @@ function setCurrentMonth(btn) {
   loadCurrentModule()
 }
 
-function setQuickDate(days, btn) {
+function setLastMonth(btn) {
   document.querySelectorAll('.tab[id^=quick]').forEach(t => t.classList.remove('active'))
   btn.classList.add('active')
   const now = new Date()
-  const past = new Date(now)
-  past.setDate(past.getDate() - days)
+  const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0)
+  dateFrom = firstDayLastMonth.toISOString().split('T')[0]
+  dateTo = lastDayLastMonth.toISOString().split('T')[0]
+  document.getElementById('date-from').value = dateFrom
+  document.getElementById('date-to').value = dateTo
+  loadCurrentModule()
+}
+
+function setCurrentYear(btn) {
+  document.querySelectorAll('.tab[id^=quick]').forEach(t => t.classList.remove('active'))
+  btn.classList.add('active')
+  const now = new Date()
+  dateFrom = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0]
   dateTo = now.toISOString().split('T')[0]
-  dateFrom = past.toISOString().split('T')[0]
   document.getElementById('date-from').value = dateFrom
   document.getElementById('date-to').value = dateTo
   loadCurrentModule()
