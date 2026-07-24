@@ -1898,49 +1898,9 @@ function agtTab(tab, btn) {
   const d = window.agtData
 
   if (tab === 'rang') {
-    const rang = d.rang || []
-    content.innerHTML = \`
-      <div class="card">
-        <div style="font-size:12px;color:#475569;margin-bottom:12px;padding:8px 12px;background:#0f172a;border-radius:8px;border:1px solid #1e3a5f">
-          <i class="fas fa-info-circle mr-1" style="color:#3b82f6"></i>
-          <strong style="color:#93c5fd">Gross marža</strong> = Prihod − Net trošak &nbsp;|&nbsp;
-          <strong style="color:#fcd34d">Komisija agenciji</strong> = Prihod × % (ili fiksni iznos) &nbsp;|&nbsp;
-          <strong style="color:#6ee7b7">Naša marža</strong> = Gross − Komisija &nbsp;|&nbsp;
-          <strong style="color:#34d399">Bez PDV</strong> = Naša marža × 0.80 (−20% PDV)
-        </div>
-        <div style="overflow:auto;max-height:580px">
-          <table><thead><tr>
-            <th>#</th><th>Agencija</th><th>Rez.</th><th>Prihod (EUR)</th>
-            <th>Gross marža</th><th style="color:#fcd34d">Komisija agt.</th>
-            <th style="color:#6ee7b7">Naša marža</th>
-            <th style="color:#34d399">Bez PDV</th>
-            <th>Avg. noć.</th><th>Stopa otk. %</th>
-          </tr></thead><tbody>
-          \${rang.map((r,i)=>{
-            const nm = parseFloat(r.nasa_marza||0)
-            return \`<tr>
-            <td style="color:#64748b;font-weight:600">\${i+1}</td>
-            <td style="font-weight:600;color:#f1f5f9">\${r.name}</td>
-            <td>\${fmtInt(r.rezervacije)}</td>
-            <td style="color:#10b981;font-weight:600">\${fmtEur(r.prihod)}</td>
-            <td style="color:#8b5cf6">\${fmtEur(r.gross_marza)}</td>
-            <td style="color:#f59e0b;font-weight:600">\${fmtEur(r.komisija_agenciji)}</td>
-            <td style="color:#10b981;font-weight:700">\${fmtEur(nm)}</td>
-            <td style="color:#34d399;font-weight:700">\${fmtEur(nm * 0.80)}</td>
-            <td>\${r.avg_nocenja?parseFloat(r.avg_nocenja).toFixed(1):'—'}</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                <div class="progress-bar" style="width:60px">
-                  <div class="progress-fill" style="width:\${Math.min(parseFloat(r.stopa_otkazivanja||0)*3,100)}%;background:\${r.stopa_otkazivanja>20?'#ef4444':r.stopa_otkazivanja>10?'#f59e0b':'#10b981'}"></div>
-                </div>
-                <span style="font-size:12px;color:\${r.stopa_otkazivanja>20?'#ef4444':r.stopa_otkazivanja>10?'#f59e0b':'#10b981'}">\${r.stopa_otkazivanja||0}%</span>
-              </div>
-            </td>
-          </tr>\`}).join('')}
-          </tbody></table>
-        </div>
-      </div>
-    \`
+    window.rangData = d.rang || []
+    window.rangSort = { col: 'prihod', dir: -1 }
+    renderRangTabela()
   }
 
   else if (tab === 'grafikon') {
@@ -2149,6 +2109,112 @@ function filterTable(input, tbodyId) {
   document.querySelectorAll('#'+tbodyId+' tr').forEach(tr => {
     tr.style.display = tr.textContent.toLowerCase().includes(val) ? '' : 'none'
   })
+}
+
+// ═══════════════════════════════════════════
+// AGENCIJE RANG — SORTABILNA TABELA
+// ═══════════════════════════════════════════
+const RANG_COLS = [
+  { key: '_rank',             label: '#',             style: '' },
+  { key: 'name',              label: 'Agencija',      style: '' },
+  { key: 'rezervacije',       label: 'Rez.',          style: '' },
+  { key: 'prihod',            label: 'Prihod (EUR)',  style: 'color:#10b981' },
+  { key: 'gross_marza',       label: 'Gross marža',   style: 'color:#8b5cf6' },
+  { key: 'komisija_agenciji', label: 'Komisija agt.', style: 'color:#fcd34d' },
+  { key: 'nasa_marza',        label: 'Naša marža',    style: 'color:#6ee7b7' },
+  { key: '_bez_pdv',          label: 'Bez PDV',       style: 'color:#34d399' },
+  { key: 'avg_nocenja',       label: 'Avg. noć.',     style: '' },
+  { key: 'stopa_otkazivanja', label: 'Stopa otk. %', style: '' },
+]
+
+function sortRang(colKey) {
+  const s = window.rangSort
+  if (s.col === colKey) {
+    s.dir *= -1
+  } else {
+    s.col = colKey
+    s.dir = colKey === 'name' ? 1 : -1
+  }
+  renderRangTabela()
+}
+
+function renderRangTabela() {
+  const rang = [...(window.rangData || [])]
+  const { col, dir } = window.rangSort
+
+  rang.sort((a, b) => {
+    let av, bv
+    if (col === '_rank' || col === '_bez_pdv') {
+      av = parseFloat(a.nasa_marza || 0) * (col === '_bez_pdv' ? 0.80 : 1)
+      bv = parseFloat(b.nasa_marza || 0) * (col === '_bez_pdv' ? 0.80 : 1)
+    } else if (col === 'name') {
+      return dir * (a.name || '').localeCompare(b.name || '', 'sr')
+    } else {
+      av = parseFloat(a[col] || 0)
+      bv = parseFloat(b[col] || 0)
+    }
+    return dir * (av - bv)
+  })
+
+  const thStyle = (key) => {
+    const active = window.rangSort.col === key
+    const col = RANG_COLS.find(c => c.key === key)
+    return \`cursor:pointer;user-select:none;white-space:nowrap;
+      \${col?.style || ''}
+      \${active ? 'color:#3b82f6 !important;' : ''}
+      transition:color .15s\`
+  }
+
+  const arrow = (key) => {
+    if (window.rangSort.col !== key) return '<span style="color:#334155;margin-left:4px">⇅</span>'
+    return window.rangSort.dir === 1
+      ? '<span style="color:#3b82f6;margin-left:4px">↑</span>'
+      : '<span style="color:#3b82f6;margin-left:4px">↓</span>'
+  }
+
+  const content = document.getElementById('agt-content')
+  content.innerHTML = \`
+    <div class="card">
+      <div style="font-size:12px;color:#475569;margin-bottom:12px;padding:8px 12px;background:#0f172a;border-radius:8px;border:1px solid #1e3a5f">
+        <i class="fas fa-info-circle mr-1" style="color:#3b82f6"></i>
+        <strong style="color:#93c5fd">Gross marža</strong> = Prihod − Net trošak &nbsp;|&nbsp;
+        <strong style="color:#fcd34d">Komisija agenciji</strong> = Prihod × % (ili fiksni iznos) &nbsp;|&nbsp;
+        <strong style="color:#6ee7b7">Naša marža</strong> = Gross − Komisija &nbsp;|&nbsp;
+        <strong style="color:#34d399">Bez PDV</strong> = Naša marža × 0.80 &nbsp;|&nbsp;
+        <i class="fas fa-info-circle mr-1" style="color:#475569"></i><span style="color:#475569">Klikni na header kolone za sortiranje</span>
+      </div>
+      <div style="overflow:auto;max-height:600px">
+        <table><thead><tr>
+          \${RANG_COLS.map(c => \`<th onclick="sortRang('\${c.key}')" style="\${thStyle(c.key)}">\${c.label}\${arrow(c.key)}</th>\`).join('')}
+        </tr></thead><tbody>
+        \${rang.map((r, i) => {
+          const nm = parseFloat(r.nasa_marza || 0)
+          const stopa = parseFloat(r.stopa_otkazivanja || 0)
+          const stopaColor = stopa > 20 ? '#ef4444' : stopa > 10 ? '#f59e0b' : '#10b981'
+          return \`<tr>
+            <td style="color:#64748b;font-weight:600">\${i + 1}</td>
+            <td style="font-weight:600;color:#f1f5f9">\${r.name}</td>
+            <td>\${fmtInt(r.rezervacije)}</td>
+            <td style="color:#10b981;font-weight:600">\${fmtEur(r.prihod)}</td>
+            <td style="color:#8b5cf6">\${fmtEur(r.gross_marza)}</td>
+            <td style="color:#f59e0b;font-weight:600">\${fmtEur(r.komisija_agenciji)}</td>
+            <td style="color:#10b981;font-weight:700">\${fmtEur(nm)}</td>
+            <td style="color:#34d399;font-weight:700">\${fmtEur(nm * 0.80)}</td>
+            <td>\${r.avg_nocenja ? parseFloat(r.avg_nocenja).toFixed(1) : '—'}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:8px">
+                <div class="progress-bar" style="width:60px">
+                  <div class="progress-fill" style="width:\${Math.min(stopa * 3, 100)}%;background:\${stopaColor}"></div>
+                </div>
+                <span style="font-size:12px;color:\${stopaColor}">\${stopa}%</span>
+              </div>
+            </td>
+          </tr>\`
+        }).join('')}
+        </tbody></table>
+      </div>
+    </div>
+  \`
 }
 
 // ═══════════════════════════════════════════
