@@ -2266,6 +2266,7 @@ const RANG_COLS = [
   { key: 'gross_marza',       label: 'Gross marža',   style: 'color:#8b5cf6' },
   { key: 'komisija_agenciji', label: 'Komisija agt.', style: 'color:#fcd34d' },
   { key: 'nasa_marza',        label: 'Naša marža',    style: 'color:#6ee7b7' },
+  { key: '_marza_pct',        label: 'Marža %',       style: 'color:#a78bfa' },
   { key: '_bez_pdv',          label: 'Bez PDV',       style: 'color:#34d399' },
   { key: 'avg_nocenja',       label: 'Avg. noć.',     style: '' },
   { key: 'stopa_otkazivanja', label: 'Stopa otk. %', style: '' },
@@ -2288,9 +2289,17 @@ function renderRangTabela() {
 
   rang.sort((a, b) => {
     let av, bv
-    if (col === '_rank' || col === '_bez_pdv') {
-      av = parseFloat(a.nasa_marza || 0) * (col === '_bez_pdv' ? 0.80 : 1)
-      bv = parseFloat(b.nasa_marza || 0) * (col === '_bez_pdv' ? 0.80 : 1)
+    if (col === '_rank' || col === '_bez_pdv' || col === '_marza_pct') {
+      if (col === '_bez_pdv') {
+        av = parseFloat(a.nasa_marza || 0) * 0.80
+        bv = parseFloat(b.nasa_marza || 0) * 0.80
+      } else if (col === '_marza_pct') {
+        av = parseFloat(a.prihod || 0) > 0 ? parseFloat(a.nasa_marza || 0) / parseFloat(a.prihod) * 100 : 0
+        bv = parseFloat(b.prihod || 0) > 0 ? parseFloat(b.nasa_marza || 0) / parseFloat(b.prihod) * 100 : 0
+      } else {
+        av = parseFloat(a.nasa_marza || 0)
+        bv = parseFloat(b.nasa_marza || 0)
+      }
     } else if (col === 'name') {
       return dir * (a.name || '').localeCompare(b.name || '', 'sr')
     } else {
@@ -2325,6 +2334,7 @@ function renderRangTabela() {
         <strong style="color:#fcd34d">Komisija agenciji</strong> = Prihod × % (ili fiksni iznos) &nbsp;|&nbsp;
         <strong style="color:#6ee7b7">Naša marža</strong> = Gross − Komisija &nbsp;|&nbsp;
         <strong style="color:#34d399">Bez PDV</strong> = Naša marža × 0.80 &nbsp;|&nbsp;
+        <strong style="color:#a78bfa">Marža %</strong> = Naša marža ÷ Prihod × 100 &nbsp;|&nbsp;
         <i class="fas fa-info-circle mr-1" style="color:#475569"></i><span style="color:#475569">Klikni na header kolone za sortiranje</span>
       </div>
       <div style="overflow:auto;max-height:600px">
