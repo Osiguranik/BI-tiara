@@ -667,16 +667,22 @@ const html = `<!DOCTYPE html>
 <script src="https://cdn.jsdelivr.net/npm/axios@1.6.0/dist/axios.min.js"></script>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
 <style>
-  * { box-sizing: border-box; }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; }
-  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0f172a; color: #e2e8f0; overscroll-behavior: none; }
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
   ::-webkit-scrollbar-track { background: #1e293b; }
   ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
-  .sidebar { width: 240px; min-height: 100vh; background: #252d3a; border-right: 1px solid #2f3a4a; position: fixed; top: 0; left: 0; z-index: 100; transition: transform .3s; }
-  .sidebar-link { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-radius: 8px; cursor: pointer; transition: all .2s; font-size: 14px; color: #94a3b8; margin: 2px 8px; }
+
+  /* ── SIDEBAR ── */
+  .sidebar { width: 240px; min-height: 100vh; background: #252d3a; border-right: 1px solid #2f3a4a; position: fixed; top: 0; left: 0; z-index: 200; transition: transform .3s cubic-bezier(.4,0,.2,1); overflow-y: auto; }
+  .sidebar-link { display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-radius: 8px; cursor: pointer; transition: all .2s; font-size: 14px; color: #94a3b8; margin: 2px 8px; }
   .sidebar-link:hover { background: #2f3a4a; color: #e2e8f0; }
   .sidebar-link.active { background: #3b82f6; color: #fff; }
+
+  /* ── MAIN ── */
   .main { margin-left: 240px; padding: 24px; min-height: 100vh; }
+
+  /* ── CARDS ── */
   .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; }
   .kpi-card { background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 12px; padding: 20px; position: relative; overflow: hidden; }
   .kpi-card::before { content:''; position:absolute; top:-30px; right:-30px; width:100px; height:100px; border-radius:50%; opacity:.1; }
@@ -685,37 +691,167 @@ const html = `<!DOCTYPE html>
   .kpi-yellow::before { background:#f59e0b; }
   .kpi-red::before { background:#ef4444; }
   .kpi-purple::before { background:#8b5cf6; }
-  .btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: all .2s; }
+
+  /* ── BUTTONS ── */
+  .btn { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: all .2s; touch-action: manipulation; }
   .btn-primary { background: #3b82f6; color: #fff; }
   .btn-primary:hover { background: #2563eb; }
   .btn-ghost { background: #334155; color: #94a3b8; }
   .btn-ghost:hover { background: #475569; color: #e2e8f0; }
-  .tab { padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 13px; color: #64748b; transition: all .2s; }
+
+  /* ── TABS ── */
+  .tab { padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; color: #64748b; transition: all .2s; white-space: nowrap; touch-action: manipulation; }
   .tab.active { background: #3b82f6; color: #fff; }
   .tab:hover:not(.active) { background: #334155; color: #94a3b8; }
+
+  /* ── INPUTS ── */
   input[type=date], select { background: #0f172a; border: 1px solid #334155; color: #e2e8f0; border-radius: 8px; padding: 8px 12px; font-size: 13px; outline: none; }
   input[type=date]:focus, select:focus { border-color: #3b82f6; }
+
+  /* ── TABLE ── */
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   th { background: #0f172a; padding: 10px 12px; text-align: left; color: #64748b; font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; border-bottom: 1px solid #334155; position: sticky; top: 0; z-index: 1; }
   td { padding: 10px 12px; border-bottom: 1px solid #1e293b; color: #cbd5e1; }
   tr:hover td { background: #1e293b; }
+
+  /* ── BADGES ── */
   .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; }
   .badge-green { background:#064e3b; color:#34d399; }
   .badge-red { background:#450a0a; color:#f87171; }
   .badge-yellow { background:#451a03; color:#fbbf24; }
   .badge-blue { background:#1e3a5f; color:#60a5fa; }
   .badge-gray { background:#1e293b; color:#94a3b8; }
+
+  /* ── MISC ── */
   .loading { display:flex; align-items:center; justify-content:center; gap:8px; color:#64748b; padding:40px; }
   .spin { animation: spin 1s linear infinite; }
   @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
   .chart-container { position:relative; width:100%; }
   .progress-bar { height:6px; background:#1e293b; border-radius:3px; overflow:hidden; }
   .progress-fill { height:100%; background: linear-gradient(90deg, #3b82f6, #8b5cf6); border-radius:3px; transition: width .6s ease; }
-  .tooltip-custom { position:absolute; background:#0f172a; border:1px solid #334155; border-radius:8px; padding:8px 12px; font-size:12px; pointer-events:none; z-index:999; }
-  @media(max-width:768px) { .sidebar{transform:translateX(-100%);background:#252d3a;} .sidebar.open{transform:translateX(0);} .main{margin-left:0;} }
+
+  /* ── OVERLAY ── */
+  .sidebar-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:199; backdrop-filter:blur(2px); }
+  .sidebar-overlay.show { display:block; }
+
+  /* ── BOTTOM NAV (mobile) ── */
+  .bottom-nav { display:none; position:fixed; bottom:0; left:0; right:0; z-index:150; background:#1a2235; border-top:1px solid #2f3a4a; padding:0; safe-area-inset-bottom: env(safe-area-inset-bottom); }
+  .bottom-nav-inner { display:flex; align-items:stretch; height:60px; }
+  .bottom-nav-item { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; cursor:pointer; color:#475569; font-size:10px; font-weight:500; transition:all .2s; border:none; background:none; padding:4px 2px; touch-action:manipulation; }
+  .bottom-nav-item.active { color:#3b82f6; }
+  .bottom-nav-item i { font-size:18px; }
+  .bottom-nav-item span { font-size:9px; line-height:1; }
+
+  /* ── TOPBAR (mobile) ── */
+  .topbar { display:none; position:fixed; top:0; left:0; right:0; z-index:150; background:#1a2235; border-bottom:1px solid #2f3a4a; height:56px; align-items:center; padding:0 16px; gap:12px; }
+  .topbar-title { flex:1; font-size:15px; font-weight:700; color:#f1f5f9; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .hamburger { width:40px; height:40px; border-radius:10px; background:#252d3a; border:none; color:#94a3b8; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0; touch-action:manipulation; }
+
+  /* ─────────────────────────────────────────
+     MOBILE BREAKPOINT
+  ───────────────────────────────────────── */
+  @media (max-width: 768px) {
+    /* layout */
+    .sidebar { transform: translateX(-100%); box-shadow: 4px 0 24px rgba(0,0,0,.4); }
+    .sidebar.open { transform: translateX(0); }
+    .sidebar-bottom { display: none; } /* hide refresh button in sidebar on mobile */
+    .main { margin-left: 0; padding: 12px 12px 80px; padding-top: 68px; }
+
+    /* show mobile chrome */
+    .topbar { display: flex; }
+    .bottom-nav { display: block; padding-bottom: env(safe-area-inset-bottom); }
+
+    /* header date filters — stack vertically */
+    .header-row { flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; }
+    .header-filters { width: 100%; }
+    .quick-tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; width: 100%; }
+    .date-inputs { display: flex; gap: 6px; width: 100%; }
+    .date-inputs input { flex: 1; min-width: 0; font-size: 12px; padding: 7px 8px; }
+
+    /* grids — single column on mobile */
+    [style*="grid-template-columns:1fr 1fr"],
+    [style*="grid-template-columns: 1fr 1fr"] { display: block !important; }
+    [style*="grid-template-columns:1fr 1fr"] > *,
+    [style*="grid-template-columns: 1fr 1fr"] > * { margin-bottom: 12px; }
+
+    [style*="grid-template-columns:2fr 1fr"],
+    [style*="grid-template-columns: 2fr 1fr"] { display: block !important; }
+    [style*="grid-template-columns:2fr 1fr"] > *,
+    [style*="grid-template-columns: 2fr 1fr"] > * { margin-bottom: 12px; }
+
+    /* KPI cards — 2 per row */
+    [style*="grid-template-columns:repeat(auto-fill,minmax(200px"] { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+    [style*="grid-template-columns:repeat(auto-fill,minmax(185px"] { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+    [style*="grid-template-columns:repeat(auto-fill,minmax(180px"] { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+    [style*="grid-template-columns:repeat(auto-fill,minmax(160px"] { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+    [style*="grid-template-columns:repeat(auto-fill,minmax(220px"] { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+
+    /* KPI card typography - smaller on mobile */
+    .kpi-card { padding: 14px 12px; }
+    .kpi-card [style*="font-size:28px"] { font-size: 22px !important; }
+    .kpi-card [style*="font-size:24px"] { font-size: 20px !important; }
+    .kpi-card [style*="font-size:22px"] { font-size: 18px !important; }
+
+    /* cards */
+    .card { padding: 14px 12px; border-radius: 10px; }
+
+    /* charts shorter on mobile */
+    .chart-container[style*="height:300px"] { height: 220px !important; }
+    .chart-container[style*="height:260px"] { height: 200px !important; }
+    .chart-container[style*="height:280px"] { height: 200px !important; }
+    .chart-container[style*="height:240px"] { height: 180px !important; }
+    .chart-container[style*="height:220px"] { height: 180px !important; }
+    .chart-container[style*="height:420px"] { height: 280px !important; }
+    .chart-container[style*="height:380px"] { height: 260px !important; }
+
+    /* tabs - horizontal scroll */
+    [style*="display:flex;gap:6px;margin-bottom:20px"],
+    [style*="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap"] {
+      flex-wrap: nowrap !important;
+      overflow-x: auto !important;
+      -webkit-overflow-scrolling: touch;
+      padding-bottom: 4px;
+      scrollbar-width: none;
+    }
+    [style*="display:flex;gap:6px;margin-bottom:20px"]::-webkit-scrollbar { display:none; }
+
+    /* tables — horizontal scroll wrapper */
+    .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    table { font-size: 12px; min-width: 500px; }
+    th, td { padding: 8px 10px; }
+
+    /* page title hidden (shown in topbar) */
+    .page-title-block { display: none !important; }
+
+    /* tab font smaller */
+    .tab { font-size: 12px; padding: 7px 12px; }
+
+    /* input search full width */
+    input[type=text][style*="width:220px"],
+    input[type=text][style*="width:200px"] { width: 100% !important; }
+  }
+
+  @media (max-width: 400px) {
+    /* very small phones - 1 KPI per row for the main overview */
+    [style*="grid-template-columns:repeat(auto-fill,minmax(200px"] { grid-template-columns: 1fr !important; }
+  }
 </style>
 </head>
 <body>
+
+<!-- OVERLAY za sidebar na mobilnom -->
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+<!-- TOPBAR (samo mobile) -->
+<header class="topbar" id="topbar">
+  <button class="hamburger" onclick="toggleSidebar()" aria-label="Meni">
+    <i class="fas fa-bars"></i>
+  </button>
+  <div class="topbar-title" id="topbar-title">Tiara Holidays</div>
+  <button class="hamburger" onclick="refreshAll()" aria-label="Osvezi" style="color:#3b82f6">
+    <i class="fas fa-sync-alt"></i>
+  </button>
+</header>
 
 <!-- SIDEBAR -->
 <aside class="sidebar" id="sidebar">
@@ -753,7 +889,7 @@ const html = `<!DOCTYPE html>
     </div>
   </div>
 
-  <div style="position:absolute;bottom:16px;left:0;right:0;padding:0 16px">
+  <div class="sidebar-bottom" style="position:absolute;bottom:16px;left:0;right:0;padding:0 16px">
     <div style="font-size:11px;color:#334155;text-align:center">Poslednje osveženo: <span id="last-refresh">-</span></div>
     <button class="btn btn-ghost" style="width:100%;margin-top:8px;font-size:12px" onclick="refreshAll()">
       <i class="fas fa-sync-alt"></i> Osvezi podatke
@@ -765,21 +901,23 @@ const html = `<!DOCTYPE html>
 <main class="main">
 
   <!-- HEADER -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
-    <div>
+  <div class="header-row" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px">
+    <div class="page-title-block">
       <h1 id="page-title" style="font-size:22px;font-weight:700;color:#f1f5f9">Glavni pregled</h1>
       <div id="page-subtitle" style="font-size:13px;color:#64748b;margin-top:2px">Svi ključni pokazatelji na jednom mestu</div>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+    <div class="header-filters" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <!-- Brzi filteri -->
-      <div style="display:flex;gap:4px;background:#1e293b;padding:4px;border-radius:10px">
+      <div class="quick-tabs" style="display:flex;gap:4px;background:#1e293b;padding:4px;border-radius:10px">
         <button class="tab active" id="quick-mtd" onclick="setCurrentMonth(this)">Ovaj mesec</button>
         <button class="tab" id="quick-lm" onclick="setLastMonth(this)">Prošli mesec</button>
         <button class="tab" id="quick-ytd" onclick="setCurrentYear(this)">Ova godina</button>
       </div>
-      <input type="date" id="date-from" onchange="onDateChange()">
-      <span style="color:#475569">—</span>
-      <input type="date" id="date-to" onchange="onDateChange()">
+      <div class="date-inputs" style="display:flex;align-items:center;gap:6px">
+        <input type="date" id="date-from" onchange="onDateChange()">
+        <span style="color:#475569">—</span>
+        <input type="date" id="date-to" onchange="onDateChange()">
+      </div>
     </div>
   </div>
 
@@ -2336,12 +2474,71 @@ function getStatusColor(status) {
 }
 
 // ═══════════════════════════════════════════
+// MOBILNI HELPERS
+// ═══════════════════════════════════════════
+function toggleSidebar() {
+  const s = document.getElementById('sidebar')
+  const o = document.getElementById('sidebar-overlay')
+  const open = s.classList.toggle('open')
+  o.classList.toggle('show', open)
+  document.body.style.overflow = open ? 'hidden' : ''
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open')
+  document.getElementById('sidebar-overlay').classList.remove('show')
+  document.body.style.overflow = ''
+}
+
+// Zatvori sidebar pri navigaciji na mobilnom
+const _origShowModule = showModule
+window.showModule = function(name) {
+  _origShowModule(name)
+  // ažuriraj topbar naslov
+  const cfg = moduleConfig[name]
+  if (cfg) document.getElementById('topbar-title').textContent = cfg.title
+  // ažuriraj bottom nav active
+  document.querySelectorAll('.bottom-nav-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.module === name)
+  })
+  // zatvori sidebar na mobilnom
+  if (window.innerWidth <= 768) closeSidebar()
+}
+
+// ═══════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════
 initDates()
 document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString('sr')
 showModule('pregled')
 </script>
+
+<!-- BOTTOM NAV (samo mobile) -->
+<nav class="bottom-nav" id="bottom-nav">
+  <div class="bottom-nav-inner">
+    <button class="bottom-nav-item active" data-module="pregled" onclick="showModule('pregled')">
+      <i class="fas fa-th-large"></i>
+      <span>Pregled</span>
+    </button>
+    <button class="bottom-nav-item" data-module="finansije" onclick="showModule('finansije')">
+      <i class="fas fa-chart-line"></i>
+      <span>Finansije</span>
+    </button>
+    <button class="bottom-nav-item" data-module="rezervacije" onclick="showModule('rezervacije')">
+      <i class="fas fa-calendar-check"></i>
+      <span>Rezervacije</span>
+    </button>
+    <button class="bottom-nav-item" data-module="agencije" onclick="showModule('agencije')">
+      <i class="fas fa-building"></i>
+      <span>Agencije</span>
+    </button>
+    <button class="bottom-nav-item" data-module="_more" onclick="toggleSidebar()">
+      <i class="fas fa-ellipsis-h"></i>
+      <span>Više</span>
+    </button>
+  </div>
+</nav>
+
 </body>
 </html>`
 
