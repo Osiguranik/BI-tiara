@@ -935,11 +935,19 @@ let charts = {}
 let dateFrom = ''
 let dateTo = ''
 
+function localDate(d) {
+  // Koristi lokalni timezone umesto UTC (toISOString daje UTC pa puca za UTC+1/+2)
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return \`\${y}-\${m}-\${day}\`
+}
+
 function initDates() {
   // Default: trenutni mesec (1. dan meseca → danas)
   const now = new Date()
-  dateTo = now.toISOString().split('T')[0]
-  dateFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+  dateTo = localDate(now)
+  dateFrom = localDate(new Date(now.getFullYear(), now.getMonth(), 1))
   document.getElementById('date-from').value = dateFrom
   document.getElementById('date-to').value = dateTo
 }
@@ -948,8 +956,8 @@ function setCurrentMonth(btn) {
   document.querySelectorAll('.tab[id^=quick]').forEach(t => t.classList.remove('active'))
   btn.classList.add('active')
   const now = new Date()
-  dateTo = now.toISOString().split('T')[0]
-  dateFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+  dateTo = localDate(now)
+  dateFrom = localDate(new Date(now.getFullYear(), now.getMonth(), 1))
   document.getElementById('date-from').value = dateFrom
   document.getElementById('date-to').value = dateTo
   loadCurrentModule()
@@ -959,10 +967,8 @@ function setLastMonth(btn) {
   document.querySelectorAll('.tab[id^=quick]').forEach(t => t.classList.remove('active'))
   btn.classList.add('active')
   const now = new Date()
-  const firstDayLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const lastDayLastMonth = new Date(now.getFullYear(), now.getMonth(), 0)
-  dateFrom = firstDayLastMonth.toISOString().split('T')[0]
-  dateTo = lastDayLastMonth.toISOString().split('T')[0]
+  dateFrom = localDate(new Date(now.getFullYear(), now.getMonth() - 1, 1))
+  dateTo = localDate(new Date(now.getFullYear(), now.getMonth(), 0))
   document.getElementById('date-from').value = dateFrom
   document.getElementById('date-to').value = dateTo
   loadCurrentModule()
@@ -972,8 +978,8 @@ function setCurrentYear(btn) {
   document.querySelectorAll('.tab[id^=quick]').forEach(t => t.classList.remove('active'))
   btn.classList.add('active')
   const now = new Date()
-  dateFrom = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0]
-  dateTo = now.toISOString().split('T')[0]
+  dateFrom = localDate(new Date(now.getFullYear(), 0, 1))
+  dateTo = localDate(now)
   document.getElementById('date-from').value = dateFrom
   document.getElementById('date-to').value = dateTo
   loadCurrentModule()
