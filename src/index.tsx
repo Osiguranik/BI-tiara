@@ -2333,6 +2333,9 @@ function renderRangTabela() {
         </tr></thead><tbody>
         \${rang.map((r, i) => {
           const nm = parseFloat(r.nasa_marza || 0)
+          const prihod = parseFloat(r.prihod || 0)
+          const marzaPct = prihod > 0 ? (nm / prihod * 100).toFixed(1) : null
+          const marzaPctColor = marzaPct === null ? '#64748b' : parseFloat(marzaPct) >= 20 ? '#10b981' : parseFloat(marzaPct) >= 10 ? '#f59e0b' : '#ef4444'
           const stopa = parseFloat(r.stopa_otkazivanja || 0)
           const stopaColor = stopa > 20 ? '#ef4444' : stopa > 10 ? '#f59e0b' : '#10b981'
           return \`<tr>
@@ -2343,6 +2346,7 @@ function renderRangTabela() {
             <td style="color:#8b5cf6">\${fmtEur(r.gross_marza)}</td>
             <td style="color:#f59e0b;font-weight:600">\${fmtEur(r.komisija_agenciji)}</td>
             <td style="color:#10b981;font-weight:700">\${fmtEur(nm)}</td>
+            <td style="font-weight:700;color:\${marzaPctColor}">\${marzaPct !== null ? marzaPct + '%' : '—'}</td>
             <td style="color:#34d399;font-weight:700">\${fmtEur(nm * 0.80)}</td>
             <td>\${r.avg_nocenja ? parseFloat(r.avg_nocenja).toFixed(1) : '—'}</td>
             <td>
