@@ -634,7 +634,7 @@ async function sheetsGet(token: string, spreadsheetId: string, range: string): P
 
 // Parser: parsira tab "2026" i vraća troškove
 function parseTroskovi2026(rows: (string|number)[][]): {
-  kategorije: Array<{ sekcija: string; naziv: string; meseci: number[]; ukupnoRsd: number; ukupnoEur: number }>,
+  kategorije,
   kurs: number,
   totalPlate: { meseci: number[]; rsd: number; eur: number },
   totalOperativa: { meseci: number[]; rsd: number; eur: number },
@@ -718,7 +718,7 @@ function parseTroskovi2026(rows: (string|number)[][]): {
     { rowIdx: 47, naziv: 'Razvoj marketinga' },
   ]
 
-  const kategorije: Array<{ sekcija: string; naziv: string; meseci: number[]; ukupnoRsd: number; ukupnoEur: number }> = []
+  const kategorije = []
 
   for (const item of PLATE_ITEMS) {
     const row = getRow(item.rowIdx)
@@ -852,7 +852,7 @@ app.get('/api/pl', async (c) => {
   const kurs = troskovi?.kurs || 117
 
   const pl = MESECI_LABELE.map((m, i) => {
-    const mRow = marzaRows.find((r: { mesec: string; nasa_marza: string; prihod: string; rezervacije: string }) => r.mesec === m)
+    const mRow = marzaRows.find((r) => r.mesec === m)
     const nasaMarza = parseFloat(mRow?.nasa_marza || '0')
     const prihod = nasaMarza * 0.80  // prihod = marža bez PDV (EUR)
 
@@ -2390,8 +2390,8 @@ async function finTab(tab, btn) {
 
     // Tabela po kategorijama × meseci
     const sekcije = ['Plate','Operativni','Razvoj']
-    const sekcijaColors: Record<string,string> = { Plate:'#ef4444', Operativni:'#f59e0b', Razvoj:'#8b5cf6' }
-    const sekcijaTotal: Record<string,{rsd:number,eur:number}> = {
+    const sekcijaColors = { Plate:'#ef4444', Operativni:'#f59e0b', Razvoj:'#8b5cf6' }
+    const sekcijaTotal = {
       Plate: {rsd:tp.rsd, eur:tp.eur},
       Operativni: {rsd:to.rsd, eur:to.eur},
       Razvoj: {rsd:tr.rsd, eur:tr.eur},
@@ -2399,7 +2399,7 @@ async function finTab(tab, btn) {
 
     let tabelaRows = ''
     for (const sek of sekcije) {
-      const stavke = kat.filter((k: {sekcija:string}) => k.sekcija === sek)
+      const stavke = kat.filter((k) => k.sekcija === sek)
       if (stavke.length === 0) continue
       // Sekcija header
       tabelaRows += \`<tr style="background:#0f172a">
@@ -2411,7 +2411,7 @@ async function finTab(tab, btn) {
       for (const k of stavke) {
         tabelaRows += \`<tr>
           <td style="font-size:12px;color:#94a3b8;padding-left:20px">\${k.naziv}</td>
-          \${k.meseci.map((v: number) => v > 0
+          \${k.meseci.map((v) => v > 0
             ? \`<td style="color:#fca5a5;font-size:12px;text-align:right">\${fmt(v,0)}</td>\`
             : \`<td style="color:#334155;font-size:11px;text-align:right">—</td>\`
           ).join('')}
@@ -2423,7 +2423,7 @@ async function finTab(tab, btn) {
       const totM = sek==='Plate' ? tp.meseci : sek==='Operativni' ? to.meseci : tr.meseci
       tabelaRows += \`<tr style="background:#1a2235;font-weight:700">
         <td style="color:\${sekcijaColors[sek]}">Total \${sek}</td>
-        \${(totM||[]).map((v: number) => \`<td style="color:\${sekcijaColors[sek]};text-align:right;font-weight:700">\${v>0?fmt(v,0):'—'}</td>\`).join('')}
+        \${(totM||[]).map((v) => \`<td style="color:\${sekcijaColors[sek]};text-align:right;font-weight:700">\${v>0?fmt(v,0):'—'}</td>\`).join('')}
         <td style="color:\${sekcijaColors[sek]};text-align:right">\${fmtEur(sekcijaTotal[sek].eur)}</td>
         <td style="color:\${sekcijaColors[sek]};text-align:right">\${fmtRsd(sekcijaTotal[sek].rsd)}</td>
       </tr>\`
@@ -2432,7 +2432,7 @@ async function finTab(tab, btn) {
     // Total svi
     tabelaRows += \`<tr style="background:#0f172a;border-top:2px solid #334155;font-weight:700">
       <td style="color:#f87171">UKUPNO RASHODI</td>
-      \${(ts.meseci||[]).map((v: number) => \`<td style="color:#f87171;text-align:right;font-weight:700">\${v>0?fmt(v,0):'—'}</td>\`).join('')}
+      \${(ts.meseci||[]).map((v) => \`<td style="color:#f87171;text-align:right;font-weight:700">\${v>0?fmt(v,0):'—'}</td>\`).join('')}
       <td style="color:#f87171;text-align:right">\${fmtEur(ts.eur)}</td>
       <td style="color:#f87171;text-align:right">\${fmtRsd(ts.rsd)}</td>
     </tr>\`
@@ -2472,7 +2472,7 @@ async function finTab(tab, btn) {
     makeChart('chart-troskovi-cat','doughnut',{
       labels: sekcije,
       datasets:[{data:sekData, backgroundColor:['rgba(239,68,68,0.85)','rgba(245,158,11,0.85)','rgba(139,92,246,0.85)'], borderColor:['#ef4444','#f59e0b','#8b5cf6'], borderWidth:2}]
-    },{plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{size:12}}},tooltip:{callbacks:{label:(ctx: {raw:number,label:string})=>' € '+ctx.raw.toLocaleString('sr-RS',{minimumFractionDigits:0})}}}})
+    },{plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{size:12}}},tooltip:{callbacks:{label:(ctx)=>' € '+ctx.raw.toLocaleString('sr-RS',{minimumFractionDigits:0})}}}})
 
     // Stacked bar — trend po mesecima (RSD) — Plate, Operativni, Razvoj
     const validMeseci = MESECI_IME.filter((_,i)=> (tp.meseci?.[i]||0)+(to.meseci?.[i]||0)+(tr.meseci?.[i]||0) > 0)
@@ -2486,7 +2486,7 @@ async function finTab(tab, btn) {
       ]
     },{scales:{
       x:{stacked:true,grid:{color:'#1e293b'},ticks:{color:'#64748b'}},
-      y:{stacked:true,grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:(v:number)=>v>=1000?(v/1000).toFixed(0)+'k':String(v)}}
+      y:{stacked:true,grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:(v)=>v>=1000?(v/1000).toFixed(0)+'k':String(v)}}
     }})
   }
 
@@ -2507,7 +2507,7 @@ async function finTab(tab, btn) {
     const sheetsOk = data.sheetsOk
 
     // Samo meseci sa podacima (bar prihod ili rashodi > 0)
-    const aktivni = pl.filter((r: {prihod:number;ukupnoRashodiEur:number}) => r.prihod > 0 || r.ukupnoRashodiEur > 0)
+    const aktivni = pl.filter((r) => r.prihod > 0 || r.ukupnoRashodiEur > 0)
 
     const ytdNetoPct = ytd.prihod > 0 ? (ytd.neto / ytd.prihod * 100).toFixed(1) : '—'
     const ytdNetoColor = ytd.neto > 0 ? '#10b981' : '#ef4444'
@@ -2615,38 +2615,38 @@ async function finTab(tab, btn) {
 
     // Chart: Prihod vs Rashodi vs Neto (line)
     makeChart('chart-pl-trend','line',{
-      labels: aktivni.map((r:{mesecIme:string}) => r.mesecIme),
+      labels: aktivni.map((r) => r.mesecIme),
       datasets:[
-        {label:'Prihod bez PDV (EUR)', data:aktivni.map((r:{prihod:number})=>r.prihod.toFixed(2)), borderColor:'#10b981', backgroundColor:'rgba(16,185,129,.1)', fill:true, tension:.4, yAxisID:'y'},
-        {label:'Rashodi (EUR)', data:aktivni.map((r:{ukupnoRashodiEur:number})=>r.ukupnoRashodiEur.toFixed(2)), borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.1)', fill:true, tension:.4, yAxisID:'y'},
-        {label:'Neto (EUR)', data:aktivni.map((r:{neto:number})=>r.neto.toFixed(2)), borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,.05)', fill:false, tension:.4, yAxisID:'y', borderDash:[5,3]},
+        {label:'Prihod bez PDV (EUR)', data:aktivni.map((r)=>r.prihod.toFixed(2)), borderColor:'#10b981', backgroundColor:'rgba(16,185,129,.1)', fill:true, tension:.4, yAxisID:'y'},
+        {label:'Rashodi (EUR)', data:aktivni.map((r)=>r.ukupnoRashodiEur.toFixed(2)), borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.1)', fill:true, tension:.4, yAxisID:'y'},
+        {label:'Neto (EUR)', data:aktivni.map((r)=>r.neto.toFixed(2)), borderColor:'#3b82f6', backgroundColor:'rgba(59,130,246,.05)', fill:false, tension:.4, yAxisID:'y', borderDash:[5,3]},
       ]
     },{scales:{
       x:{grid:{color:'#1e293b'},ticks:{color:'#64748b'}},
-      y:{grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:(v:number)=>'€'+v.toLocaleString()}}
+      y:{grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:(v)=>'€'+v.toLocaleString()}}
     }})
 
     // Chart: Stacked rashodi po mesecima
     makeChart('chart-pl-rashodi','bar',{
-      labels: aktivni.map((r:{mesecIme:string}) => r.mesecIme),
+      labels: aktivni.map((r) => r.mesecIme),
       datasets:[
-        {label:'Plate', data:aktivni.map((r:{plateRsd:number})=>r.plateRsd), backgroundColor:'rgba(239,68,68,0.8)', stack:'s'},
-        {label:'Operativni', data:aktivni.map((r:{operativaRsd:number})=>r.operativaRsd), backgroundColor:'rgba(245,158,11,0.8)', stack:'s'},
-        {label:'Razvoj', data:aktivni.map((r:{razvojRsd:number})=>r.razvojRsd), backgroundColor:'rgba(139,92,246,0.8)', stack:'s'},
+        {label:'Plate', data:aktivni.map((r)=>r.plateRsd), backgroundColor:'rgba(239,68,68,0.8)', stack:'s'},
+        {label:'Operativni', data:aktivni.map((r)=>r.operativaRsd), backgroundColor:'rgba(245,158,11,0.8)', stack:'s'},
+        {label:'Razvoj', data:aktivni.map((r)=>r.razvojRsd), backgroundColor:'rgba(139,92,246,0.8)', stack:'s'},
       ]
     },{scales:{
       x:{stacked:true,grid:{color:'#1e293b'},ticks:{color:'#64748b'}},
-      y:{stacked:true,grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:(v:number)=>v>=1000?(v/1000).toFixed(0)+'k':String(v)}}
+      y:{stacked:true,grid:{color:'#1e293b'},ticks:{color:'#64748b',callback:(v)=>v>=1000?(v/1000).toFixed(0)+'k':String(v)}}
     }})
 
     // Chart: Neto bar (zeleno/crveno)
     makeChart('chart-pl-neto','bar',{
-      labels: aktivni.map((r:{mesecIme:string}) => r.mesecIme),
+      labels: aktivni.map((r) => r.mesecIme),
       datasets:[{
         label:'Neto (EUR)',
-        data:aktivni.map((r:{neto:number})=>r.neto.toFixed(2)),
-        backgroundColor:aktivni.map((r:{neto:number})=>r.neto>=0?'rgba(16,185,129,0.8)':'rgba(239,68,68,0.8)'),
-        borderColor:aktivni.map((r:{neto:number})=>r.neto>=0?'#10b981':'#ef4444'),
+        data:aktivni.map((r)=>r.neto.toFixed(2)),
+        backgroundColor:aktivni.map((r)=>r.neto>=0?'rgba(16,185,129,0.8)':'rgba(239,68,68,0.8)'),
+        borderColor:aktivni.map((r)=>r.neto>=0?'#10b981':'#ef4444'),
         borderWidth:1,
       }]
     })
