@@ -6,9 +6,210 @@ type Bindings = {
   GW_URL: string
   GW_KEY_ID: string
   GW_SECRET: string
+  JWT_SECRET: string
+  AUTH_USERS: string  // JSON: [{"email":"...","password":"..."}]
 }
 
 const app = new Hono<{ Bindings: Bindings }>()
+
+// ═══════════════════════════════════════════
+// AUTH HELPERS
+// ═══════════════════════════════════════════
+
+async function signJWT(payload: object, secret: string): Promise<string> {
+  const header = { alg: 'HS256', typ: 'JWT' }
+  const enc = (obj: object) => btoa(JSON.stringify(obj)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+  const data = `${enc(header)}.${enc(payload)}`
+  const key = await crypto.subtle.importKey(
+    'raw', new TextEncoder().encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+  )
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(data))
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig))).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+  return `${data}.${sigB64}`
+}
+
+async function verifyJWT(token: string, secret: string): Promise<{ email: string } | null> {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    const data = `${parts[0]}.${parts[1]}`
+    const key = await crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(secret),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['verify']
+    )
+    const sigBytes = Uint8Array.from(atob(parts[2].replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))
+    const valid = await crypto.subtle.verify('HMAC', key, sigBytes, new TextEncoder().encode(data))
+    if (!valid) return null
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+    if (payload.exp && Date.now() / 1000 > payload.exp) return null
+    return { email: payload.email }
+  } catch { return null }
+}
+
+function getTokenFromRequest(req: Request): string | null {
+  const cookie = req.headers.get('cookie') || ''
+  const match = cookie.match(/bi_token=([^;]+)/)
+  if (match) return match[1]
+  const auth = req.headers.get('authorization') || ''
+  if (auth.startsWith('Bearer ')) return auth.slice(7)
+  return null
+}
+
+// ═══════════════════════════════════════════
+// AUTH MIDDLEWARE — štiti / i /api/*
+// ═══════════════════════════════════════════
+app.use('/*', async (c, next) => {
+  const path = new URL(c.req.url).pathname
+  // Javne rute — bez provjere
+  if (path === '/login' || path === '/api/login') return next()
+
+  const secret = c.env.JWT_SECRET || 'fallback-secret-change-me'
+  const token = getTokenFromRequest(c.req.raw)
+  const user = token ? await verifyJWT(token, secret) : null
+
+  if (!user) {
+    // API pozivi → 401 JSON
+    if (path.startsWith('/api/')) {
+      return c.json({ error: 'Unauthorized' }, 401)
+    }
+    // Stranice → redirect na /login
+    return c.redirect('/login')
+  }
+  return next()
+})
+
+// ═══════════════════════════════════════════
+// LOGIN STRANICA
+// ═══════════════════════════════════════════
+app.get('/login', (c) => {
+  const msg = c.req.query('error') === '1' ? 'Pogrešan email ili lozinka.' : ''
+  const msgLogout = c.req.query('logout') === '1' ? 'Uspješno ste se odjavili.' : ''
+  return c.html(`<!DOCTYPE html>
+<html lang="sr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prijava — Tiara BI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+  <style>
+    body { background: #0f172a; }
+    .card { background: #1e293b; border: 1px solid #334155; }
+    input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.2); }
+    .btn-primary { background: linear-gradient(135deg,#3b82f6,#6366f1); transition: opacity .2s; }
+    .btn-primary:hover { opacity: .9; }
+    .logo-circle { background: linear-gradient(135deg,#0ea5e9,#6366f1); }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+  <div class="card rounded-2xl shadow-2xl w-full max-w-md p-8">
+
+    <!-- Logo -->
+    <div class="flex flex-col items-center mb-8">
+      <div class="logo-circle w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-lg">
+        <i class="fas fa-chart-line text-white text-2xl"></i>
+      </div>
+      <h1 class="text-2xl font-bold text-white">Tiara BI</h1>
+      <p class="text-slate-400 text-sm mt-1">Business Intelligence Dashboard</p>
+    </div>
+
+    <!-- Poruke -->
+    ${msg ? `<div class="mb-4 px-4 py-3 rounded-lg bg-red-900/40 border border-red-700 text-red-300 text-sm flex items-center gap-2"><i class="fas fa-exclamation-circle"></i>${msg}</div>` : ''}
+    ${msgLogout ? `<div class="mb-4 px-4 py-3 rounded-lg bg-green-900/40 border border-green-700 text-green-300 text-sm flex items-center gap-2"><i class="fas fa-check-circle"></i>${msgLogout}</div>` : ''}
+
+    <!-- Forma -->
+    <form method="POST" action="/api/login" id="loginForm">
+      <div class="mb-5">
+        <label class="block text-slate-300 text-sm font-medium mb-2">
+          <i class="fas fa-envelope mr-1 text-slate-400"></i>Email adresa
+        </label>
+        <input
+          type="email" name="email" required autofocus
+          placeholder="vas@email.com"
+          class="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 text-white placeholder-slate-500 text-sm"
+        >
+      </div>
+      <div class="mb-6">
+        <label class="block text-slate-300 text-sm font-medium mb-2">
+          <i class="fas fa-lock mr-1 text-slate-400"></i>Lozinka
+        </label>
+        <div class="relative">
+          <input
+            type="password" name="password" required id="pwdInput"
+            placeholder="••••••••••"
+            class="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-3 pr-12 text-white placeholder-slate-500 text-sm"
+          >
+          <button type="button" onclick="togglePwd()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200">
+            <i class="fas fa-eye" id="eyeIcon"></i>
+          </button>
+        </div>
+      </div>
+      <button type="submit" id="submitBtn"
+        class="btn-primary w-full py-3 rounded-xl text-white font-semibold text-sm shadow-lg flex items-center justify-center gap-2">
+        <i class="fas fa-sign-in-alt"></i>
+        <span>Prijavi se</span>
+      </button>
+    </form>
+
+    <p class="text-center text-slate-600 text-xs mt-6">
+      <i class="fas fa-shield-alt mr-1"></i>Pristup zaštićen — Tiara Travel © 2025
+    </p>
+  </div>
+
+  <script>
+    function togglePwd() {
+      const i = document.getElementById('pwdInput')
+      const e = document.getElementById('eyeIcon')
+      if (i.type === 'password') { i.type = 'text'; e.className = 'fas fa-eye-slash' }
+      else { i.type = 'password'; e.className = 'fas fa-eye' }
+    }
+    document.getElementById('loginForm').addEventListener('submit', function() {
+      const btn = document.getElementById('submitBtn')
+      btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Prijava...</span>'
+      btn.disabled = true
+    })
+  </script>
+</body>
+</html>`)
+})
+
+// ═══════════════════════════════════════════
+// LOGIN POST — provjera kredencijala
+// ═══════════════════════════════════════════
+app.post('/api/login', async (c) => {
+  const body = await c.req.parseBody()
+  const email = (body.email as string || '').toLowerCase().trim()
+  const password = body.password as string || ''
+
+  const secret = c.env.JWT_SECRET || 'fallback-secret-change-me'
+  const usersJson = c.env.AUTH_USERS || '[]'
+  let users: { email: string; password: string }[] = []
+  try { users = JSON.parse(usersJson) } catch { users = [] }
+
+  const user = users.find(u => u.email.toLowerCase() === email && u.password === password)
+  if (!user) {
+    return c.redirect('/login?error=1')
+  }
+
+  // Kreiraj JWT — važi 8 sati
+  const token = await signJWT(
+    { email: user.email, exp: Math.floor(Date.now() / 1000) + 8 * 3600 },
+    secret
+  )
+
+  // Postavi cookie i redirect na /
+  c.header('Set-Cookie', `bi_token=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${8 * 3600}`)
+  return c.redirect('/')
+})
+
+// ═══════════════════════════════════════════
+// LOGOUT
+// ═══════════════════════════════════════════
+app.get('/logout', (c) => {
+  c.header('Set-Cookie', 'bi_token=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0')
+  return c.redirect('/login?logout=1')
+})
 
 app.use('/api/*', cors())
 
@@ -851,6 +1052,9 @@ const html = `<!DOCTYPE html>
   <button class="hamburger" onclick="refreshAll()" aria-label="Osvezi" style="color:#3b82f6">
     <i class="fas fa-sync-alt"></i>
   </button>
+  <a href="/logout" class="hamburger" aria-label="Odjava" style="color:#ef4444;text-decoration:none" title="Odjava">
+    <i class="fas fa-sign-out-alt"></i>
+  </a>
 </header>
 
 <!-- SIDEBAR -->
@@ -894,6 +1098,9 @@ const html = `<!DOCTYPE html>
     <button class="btn btn-ghost" style="width:100%;margin-top:8px;font-size:12px" onclick="refreshAll()">
       <i class="fas fa-sync-alt"></i> Osvezi podatke
     </button>
+    <a href="/logout" style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:8px;padding:8px;border-radius:8px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#ef4444;font-size:12px;text-decoration:none;transition:background .2s" onmouseover="this.style.background='rgba(239,68,68,.2)'" onmouseout="this.style.background='rgba(239,68,68,.1)'">
+      <i class="fas fa-sign-out-alt"></i> Odjava
+    </a>
   </div>
 </aside>
 
