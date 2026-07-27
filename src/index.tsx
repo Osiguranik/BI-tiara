@@ -1619,8 +1619,18 @@ function fmt(n, dec=2) {
   if (isNaN(num)) return '—'
   return num.toLocaleString('sr-RS', { minimumFractionDigits: dec, maximumFractionDigits: dec })
 }
-function fmtEur(n) { return n > 0 ? '€ ' + fmt(n) : '—' }
-function fmtRsd(n) { return n > 0 ? fmt(n, 0) + ' RSD' : '—' }
+function fmtEur(n) {
+  if (n == null || n === '') return '—'
+  const num = parseFloat(n)
+  if (isNaN(num) || num === 0) return '—'
+  return (num < 0 ? '-€ ' : '€ ') + fmt(Math.abs(num))
+}
+function fmtRsd(n) {
+  if (n == null || n === '') return '—'
+  const num = parseFloat(n)
+  if (isNaN(num) || num === 0) return '—'
+  return (num < 0 ? '-' : '') + fmt(Math.abs(num), 0) + ' RSD'
+}
 function fmtInt(n) { return n == null ? '0' : parseInt(n).toLocaleString('sr-RS') }
 
 const STATUS_LABELS = {
