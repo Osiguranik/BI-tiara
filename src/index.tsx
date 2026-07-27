@@ -2201,26 +2201,59 @@ async function finTab(tab, btn) {
     const kurs = data.kurs || 117
     const MESECI_IME = ['jan','feb','mar','apr','maj','jun','jul','avg','sep','okt','nov','dec']
 
-    // KPI kartice
+    // ── Filtriranje po datumu (dateFrom / dateTo su globalne) ──
+    // Sheets data je uvek 12 meseci za 2026; filtriramo prikaz po odabranom periodu
+    const troskoviYear = 2026
+    let fFromIdx = 0   // 0=jan
+    let fToIdx = 11    // 11=dec
+    if (dateFrom) {
+      const fp = dateFrom.split('-')
+      if (parseInt(fp[0]) === troskoviYear) fFromIdx = Math.max(0, parseInt(fp[1]) - 1)
+      else if (parseInt(fp[0]) > troskoviYear) fFromIdx = 12  // ceo niz van opsega
+    }
+    if (dateTo) {
+      const tp2 = dateTo.split('-')
+      if (parseInt(tp2[0]) === troskoviYear) fToIdx = Math.min(11, parseInt(tp2[1]) - 1)
+      else if (parseInt(tp2[0]) < troskoviYear) fToIdx = -1   // ceo niz van opsega
+    }
+    // Indeksi meseci koji su u filteru
+    const filtIdx = []
+    for (let i = fFromIdx; i <= fToIdx && i < 12; i++) filtIdx.push(i)
+    const filtMeseci = filtIdx.map((i) => MESECI_IME[i])
+
+    // Sume za filtrirani period
+    function sumMeseci(arr) {
+      return filtIdx.reduce((s, i) => s + (arr?.[i] || 0), 0)
+    }
+    const filtTp = { rsd: sumMeseci(tp.meseci), eur: sumMeseci(tp.meseci) / kurs }
+    const filtTo = { rsd: sumMeseci(to.meseci), eur: sumMeseci(to.meseci) / kurs }
+    const filtTr = { rsd: sumMeseci(tr.meseci), eur: sumMeseci(tr.meseci) / kurs }
+    const filtTs = { rsd: filtTp.rsd + filtTo.rsd + filtTr.rsd, eur: filtTp.eur + filtTo.eur + filtTr.eur }
+
+    const periodLabel = filtIdx.length === 12 ? 'cela godina' : (filtMeseci[0] || '') + (filtMeseci.length > 1 ? ' – ' + filtMeseci[filtMeseci.length-1] : '')
+
+    // KPI kartice — prikazuju sume filtriranog perioda
     const kpiHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px;margin-bottom:20px"> <div class="kpi-card kpi-red"> <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-users mr-1"></i>Plate</div> <div style="font-size:20px;font-weight:700;color:#ef4444">'
-    + fmtEur(tp.eur)
+    + fmtEur(filtTp.eur)
     + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">'
-    + fmtRsd(tp.rsd)
+    + fmtRsd(filtTp.rsd)
     + '</div>\n        </div>\n        <div class="kpi-card kpi-yellow">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-cogs mr-1"></i>Operativni</div>\n          <div style="font-size:20px;font-weight:700;color:#f59e0b">'
-    + fmtEur(to.eur)
+    + fmtEur(filtTo.eur)
     + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">'
-    + fmtRsd(to.rsd)
+    + fmtRsd(filtTo.rsd)
     + '</div>\n        </div>\n        <div class="kpi-card kpi-purple">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-code mr-1"></i>Razvoj</div>\n          <div style="font-size:20px;font-weight:700;color:#8b5cf6">'
-    + fmtEur(tr.eur)
+    + fmtEur(filtTr.eur)
     + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">'
-    + fmtRsd(tr.rsd)
+    + fmtRsd(filtTr.rsd)
     + '</div>\n        </div>\n        <div class="kpi-card" style="background:linear-gradient(135deg,#450a0a,#0f172a);border:2px solid #7f1d1d;border-radius:12px;padding:20px">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-money-bill-wave mr-1" style="color:#f87171"></i>UKUPNI RASHODI</div>\n          <div style="font-size:22px;font-weight:700;color:#f87171">'
-    + fmtEur(ts.eur)
+    + fmtEur(filtTs.eur)
     + '</div>\n          <div style="font-size:12px;color:#ef4444;margin-top:4px">'
-    + fmtRsd(ts.rsd)
+    + fmtRsd(filtTs.rsd)
     + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">Kurs: 1 EUR ≈ '
     + fmt(kurs,2)
-    + ' RSD</div>\n        </div>\n        <div class="kpi-card kpi-blue">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-list mr-1"></i>Kategorija</div>\n          <div style="font-size:22px;font-weight:700;color:#3b82f6">'
+    + ' RSD | Period: '
+    + periodLabel
+    + '</div>\n        </div>\n        <div class="kpi-card kpi-blue">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-list mr-1"></i>Kategorija</div>\n          <div style="font-size:22px;font-weight:700;color:#3b82f6">'
     + kat.length
     + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">aktivnih troškova</div>\n        </div>\n      </div>'
 
@@ -2228,9 +2261,9 @@ async function finTab(tab, btn) {
     const sekcije = ['Plate','Operativni','Razvoj']
     const sekcijaColors = { Plate:'#ef4444', Operativni:'#f59e0b', Razvoj:'#8b5cf6' }
     const sekcijaTotal = {
-      Plate: {rsd:tp.rsd, eur:tp.eur},
-      Operativni: {rsd:to.rsd, eur:to.eur},
-      Razvoj: {rsd:tr.rsd, eur:tr.eur},
+      Plate: {rsd:filtTp.rsd, eur:filtTp.eur},
+      Operativni: {rsd:filtTo.rsd, eur:filtTo.eur},
+      Razvoj: {rsd:filtTr.rsd, eur:filtTr.eur},
     }
 
     let tabelaRows = ''
@@ -2245,7 +2278,7 @@ async function finTab(tab, btn) {
     + ';padding:10px 12px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;border-top:2px solid '
     + sekcijaColors[sek]
     + '44">\n          <i class="fas fa-'
-    + sek==='Plate'?'users':sek==='Operativni'?'cogs':'code'
+    + (sek==='Plate'?'users':sek==='Operativni'?'cogs':'code')
     + ' mr-1"></i>'
     + sek
     + '&nbsp;<span style="color:#475569;font-size:11px;font-weight:400;text-transform:none">Ukupno: <span style="color:'
@@ -2256,19 +2289,22 @@ async function finTab(tab, btn) {
     + fmtRsd(sekcijaTotal[sek].rsd)
     + '</span>\n        </td>\n      </tr>'
       for (const k of stavke) {
+        // Suma za filtrirani period
+        const kFiltRsd = filtIdx.reduce((s, i) => s + (k.meseci?.[i] || 0), 0)
+        const kFiltEur = kFiltRsd / kurs
         tabelaRows += '<tr>\n          <td style="font-size:12px;color:#94a3b8;padding-left:20px">'
     + k.naziv
     + '</td>\n          '
-    + k.meseci.map((v) => v > 0
+    + filtIdx.map((i) => { const v = k.meseci?.[i] || 0; return v > 0
             ? '<td style="color:#fca5a5;font-size:12px;text-align:right">'+fmt(v,0)+'</td>'
             : '<td style="color:#334155;font-size:11px;text-align:right">—</td>'
-          ).join('')
+          }).join('')
     + '<td style="color:'
     + sekcijaColors[sek]
     + ';font-weight:600;text-align:right">'
-    + fmtEur(k.ukupnoEur)
+    + fmtEur(kFiltEur)
     + '</td>\n          <td style="color:#94a3b8;font-size:12px;text-align:right">'
-    + fmtRsd(k.ukupnoRsd)
+    + fmtRsd(kFiltRsd)
     + '</td>\n        </tr>'
       }
       // Sekcija total red
@@ -2278,7 +2314,7 @@ async function finTab(tab, btn) {
     + '">Total '
     + sek
     + '</td>\n        '
-    + (totM||[]).map((v) => '<td style="color:'+sekcijaColors[sek]+';text-align:right;font-weight:700">'+(v>0?fmt(v,0):'—')+'</td>').join('')
+    + filtIdx.map((i) => { const v = (totM||[])[i] || 0; return '<td style="color:'+sekcijaColors[sek]+';text-align:right;font-weight:700">'+(v>0?fmt(v,0):'—')+'</td>'; }).join('')
     + '<td style="color:'
     + sekcijaColors[sek]
     + ';text-align:right">'
@@ -2292,34 +2328,31 @@ async function finTab(tab, btn) {
 
     // Total svi
     tabelaRows += '<tr style="background:#0f172a;border-top:2px solid #334155;font-weight:700">\n      <td style="color:#f87171">UKUPNO RASHODI</td>\n      '
-    + (ts.meseci||[]).map((v) => '<td style="color:#f87171;text-align:right;font-weight:700">'+(v>0?fmt(v,0):'—')+'</td>').join('')
+    + filtIdx.map((i) => { const v = (ts.meseci||[])[i] || 0; return '<td style="color:#f87171;text-align:right;font-weight:700">'+(v>0?fmt(v,0):'—')+'</td>'; }).join('')
     + '<td style="color:#f87171;text-align:right">'
-    + fmtEur(ts.eur)
+    + fmtEur(filtTs.eur)
     + '</td>\n      <td style="color:#f87171;text-align:right">'
-    + fmtRsd(ts.rsd)
+    + fmtRsd(filtTs.rsd)
     + '</td>\n    </tr>'
 
     content.innerHTML = kpiHtml + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px"> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-bar mr-2" style="color:#ef4444"></i>Rashodi po kategoriji (EUR)</div> <div class="chart-container" style="height:280px"><canvas id="chart-troskovi-cat"></canvas></div> </div> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-area mr-2" style="color:#f59e0b"></i>Trend rashoda po mesecima (RSD)</div> <div class="chart-container" style="height:280px"><canvas id="chart-troskovi-trend"></canvas></div> </div> </div> <div class="card" style="margin-bottom:16px"> <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-table mr-2" style="color:#f87171"></i>Troškovi po kategorijama × mesecima (RSD)</div> <div style="font-size:12px;color:#475569;margin-bottom:12px">Sve vrednosti u RSD. Kurs za EUR konverziju: <strong style="color:#f59e0b">1 EUR ≈'
     + fmt(kurs,2)
     + ' RSD</strong></div>\n        <div style="overflow:auto;max-height:580px">\n          <table style="min-width:900px"><thead><tr>\n            <th style="min-width:160px">Kategorija</th>\n            '
-    + MESECI_IME.map(m=>'<th style="text-align:right;min-width:70px">'+m+'</th>').join('')
+    + filtMeseci.map(m=>'<th style="text-align:right;min-width:70px">'+m+'</th>').join('')
     + '<th style="text-align:right;min-width:90px;color:#a78bfa">Ukupno EUR</th> <th style="text-align:right;min-width:110px">Ukupno RSD</th> </tr></thead><tbody>'
     + tabelaRows
     + '</tbody></table> </div> </div>'
 
-    // Doughnut — raspodela po sekcijama
-    const sekData = sekcije.map(s => {
-      const t = sekcijaTotal[s]
-      return t.eur
-    })
+    // Doughnut — raspodela po sekcijama (filtrirani period)
+    const sekData = [filtTp.eur, filtTo.eur, filtTr.eur]
     makeChart('chart-troskovi-cat','doughnut',{
       labels: sekcije,
       datasets:[{data:sekData, backgroundColor:['rgba(239,68,68,0.85)','rgba(245,158,11,0.85)','rgba(139,92,246,0.85)'], borderColor:['#ef4444','#f59e0b','#8b5cf6'], borderWidth:2}]
     },{plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{size:12}}},tooltip:{callbacks:{label:(ctx)=>' € '+ctx.raw.toLocaleString('sr-RS',{minimumFractionDigits:0})}}}})
 
-    // Stacked bar — trend po mesecima (RSD) — Plate, Operativni, Razvoj
-    const validMeseci = MESECI_IME.filter((_,i)=> (tp.meseci?.[i]||0)+(to.meseci?.[i]||0)+(tr.meseci?.[i]||0) > 0)
-    const validIdx = MESECI_IME.map((_,i)=>i).filter(i=> (tp.meseci?.[i]||0)+(to.meseci?.[i]||0)+(tr.meseci?.[i]||0) > 0)
+    // Stacked bar — trend po mesecima (RSD) — Plate, Operativni, Razvoj (filtrirani)
+    const validMeseci = filtIdx.filter(i=> (tp.meseci?.[i]||0)+(to.meseci?.[i]||0)+(tr.meseci?.[i]||0) > 0).map(i=>MESECI_IME[i])
+    const validIdx = filtIdx.filter(i=> (tp.meseci?.[i]||0)+(to.meseci?.[i]||0)+(tr.meseci?.[i]||0) > 0)
     makeChart('chart-troskovi-trend','bar',{
       labels: validMeseci,
       datasets:[
@@ -2360,21 +2393,21 @@ async function finTab(tab, btn) {
     + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">Naša marža × 0.80</div>\n        </div>\n        <div class="kpi-card kpi-green">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-chart-pie mr-1"></i>YTD Naša marža</div>\n          <div style="font-size:22px;font-weight:700;color:#6ee7b7">'
     + fmtEur(ytd.nasaMarza)
     + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">pre odbitka PDV</div>\n        </div>\n        <div class="kpi-card kpi-red">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-money-bill-wave mr-1"></i>YTD Rashodi (EUR)</div>\n          <div style="font-size:22px;font-weight:700;color:#f87171">'
-    + sheetsOk?fmtEur(ytd.rashodiEur):'N/A'
+    + (sheetsOk?fmtEur(ytd.rashodiEur):'N/A')
     + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">'
-    + sheetsOk?fmtRsd(ytd.rashodiRsd):'Sheets nisu konfigurisani'
+    + (sheetsOk?fmtRsd(ytd.rashodiRsd):'Sheets nisu konfigurisani')
     + '</div>\n        </div>\n        <div class="kpi-card" style="background:linear-gradient(135deg,'
-    + ytd.neto>0?'#052e16':'#450a0a'
+    + (ytd.neto>0?'#052e16':'#450a0a')
     + ',#0f172a);border:2px solid '
-    + ytd.neto>0?'#166534':'#7f1d1d'
+    + (ytd.neto>0?'#166534':'#7f1d1d')
     + ';border-radius:12px;padding:20px">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-balance-scale mr-1" style="color:'
     + ytdNetoColor
     + '"></i>YTD NETO REZULTAT</div>\n          <div style="font-size:24px;font-weight:700;color:'
     + ytdNetoColor
     + '">'
-    + sheetsOk?fmtEur(ytd.neto):'N/A'
+    + (sheetsOk?fmtEur(ytd.neto):'N/A')
     + '</div>\n          <div style="font-size:12px;color:#475569;margin-top:4px">'
-    + sheetsOk?ytdNetoPct+'% neto marže':'—'
+    + (sheetsOk?ytdNetoPct+'% neto marže':'—')
     + '</div>\n        </div>\n        <div class="kpi-card kpi-blue">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-exchange-alt mr-1"></i>Kurs EUR/RSD</div>\n          <div style="font-size:22px;font-weight:700;color:#3b82f6">'
     + fmt(kurs,2)
     + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">iz Sheets tabele</div>\n        </div>\n      </div>\n    '
@@ -2393,21 +2426,21 @@ async function finTab(tab, btn) {
     + '</td>\n        <td style="color:#10b981;font-weight:700">'
     + fmtEur(r.prihod)
     + '</td>\n        <td style="color:#f87171">'
-    + sheetsOk?fmtRsd(r.plateRsd):'—'
+    + (sheetsOk?fmtRsd(r.plateRsd):'—')
     + '</td>\n        <td style="color:#fbbf24">'
-    + sheetsOk?fmtRsd(r.operativaRsd):'—'
+    + (sheetsOk?fmtRsd(r.operativaRsd):'—')
     + '</td>\n        <td style="color:#a78bfa">'
-    + sheetsOk?fmtRsd(r.razvojRsd):'—'
+    + (sheetsOk?fmtRsd(r.razvojRsd):'—')
     + '</td>\n        <td style="color:#f87171;font-weight:600">'
-    + sheetsOk?fmtEur(r.ukupnoRashodiEur):'—'
+    + (sheetsOk?fmtEur(r.ukupnoRashodiEur):'—')
     + '</td>\n        <td style="color:'
     + netoColor
     + ';font-weight:700">'
-    + sheetsOk?netoIcon+' '+fmtEur(r.neto):'—'
+    + (sheetsOk?netoIcon+' '+fmtEur(r.neto):'—')
     + '</td>\n        <td style="color:'
     + netoColor
     + ';font-size:12px">'
-    + sheetsOk&&r.prihod>0?(r.netoPct>0?'+':'')+r.netoPct.toFixed(1)+'%':'—'
+    + (sheetsOk&&r.prihod>0?(r.netoPct>0?'+':'')+r.netoPct.toFixed(1)+'%':'—')
     + '</td>\n        <td style="color:#64748b">'
     + fmtInt(r.rezervacije)
     + '</td>\n      </tr>'
@@ -2419,17 +2452,17 @@ async function finTab(tab, btn) {
     + '</td>\n      <td style="color:#10b981">'
     + fmtEur(ytd.prihod)
     + '</td>\n      <td style="color:#f87171" colspan="3">'
-    + sheetsOk?fmtRsd(ytd.rashodiRsd):'—'
+    + (sheetsOk?fmtRsd(ytd.rashodiRsd):'—')
     + '</td>\n      <td style="color:#f87171">'
-    + sheetsOk?fmtEur(ytd.rashodiEur):'—'
+    + (sheetsOk?fmtEur(ytd.rashodiEur):'—')
     + '</td>\n      <td style="color:'
     + ytdNetoRowColor
     + '">'
-    + sheetsOk?fmtEur(ytd.neto):'—'
+    + (sheetsOk?fmtEur(ytd.neto):'—')
     + '</td>\n      <td style="color:'
     + ytdNetoRowColor
     + '">'
-    + sheetsOk&&ytd.prihod>0?ytdNetoPct+'%':'—'
+    + (sheetsOk&&ytd.prihod>0?ytdNetoPct+'%':'—')
     + '</td>\n      <td style="color:#64748b">'
     + fmtInt(ytd.rezervacije)
     + '</td>\n    </tr>'
