@@ -875,7 +875,7 @@ const html = `<!DOCTYPE html>
   ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
 
   /* ── SIDEBAR ── */
-  .sidebar { width: 240px; min-height: 100vh; background: #252d3a; border-right: 1px solid #2f3a4a; position: fixed; top: 0; left: 0; z-index: 200; transition: transform .3s cubic-bezier(.4,0,.2,1); overflow-y: auto; }
+  .sidebar { width: 240px; min-height: 100vh; background: #141414; border-right: 1px solid #2f3a4a; position: fixed; top: 0; left: 0; z-index: 200; transition: transform .3s cubic-bezier(.4,0,.2,1); overflow-y: auto; }
   .sidebar-link { display: flex; align-items: center; gap: 10px; padding: 11px 16px; border-radius: 8px; cursor: pointer; transition: all .2s; font-size: 14px; color: #94a3b8; margin: 2px 8px; }
   .sidebar-link:hover { background: #2f3a4a; color: #e2e8f0; }
   .sidebar-link.active { background: #3b82f6; color: #fff; }
