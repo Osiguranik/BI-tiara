@@ -1475,16 +1475,41 @@ const html = `<!DOCTYPE html>
 // STATE & CONFIG
 // ═══════════════════════════════════════════
 let currentModule = 'pregled'
+let currentTab = ''
 let charts = {}
 let dateFrom = ''
 let dateTo = ''
+
+// ─── URL HASH ROUTING ────────────────────────────────────────────────
+// Format: #modul/tab?from=2026-01-01&to=2026-07-27
+function updateHash() {
+  const parts = [currentModule]
+  if (currentTab) parts.push(currentTab)
+  let hash = '#' + parts.join('/')
+  if (dateFrom && dateTo) hash += '?from=' + dateFrom + '&to=' + dateTo
+  history.replaceState(null, '', hash)
+}
+
+function parseHash() {
+  const raw = location.hash.slice(1) // remove '#'
+  const [path, query] = raw.split('?')
+  const [mod, tab] = (path || '').split('/')
+  const params = new URLSearchParams(query || '')
+  return {
+    mod: mod || 'pregled',
+    tab: tab || '',
+    from: params.get('from') || '',
+    to: params.get('to') || ''
+  }
+}
+// ─────────────────────────────────────────────────────────────────────
 
 function localDate(d) {
   // Koristi lokalni timezone umesto UTC (toISOString daje UTC pa puca za UTC+1/+2)
   const y = d.getFullYear()
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
-  return \`\${y}-\${m}-\${day}\`
+  return y + '-' + m + '-' + day
 }
 
 function initDates() {
@@ -1504,6 +1529,7 @@ function setCurrentMonth(btn) {
   dateFrom = localDate(new Date(now.getFullYear(), now.getMonth(), 1))
   document.getElementById('date-from').value = dateFrom
   document.getElementById('date-to').value = dateTo
+  updateHash()
   loadCurrentModule()
 }
 
@@ -1515,6 +1541,7 @@ function setLastMonth(btn) {
   dateTo = localDate(new Date(now.getFullYear(), now.getMonth(), 0))
   document.getElementById('date-from').value = dateFrom
   document.getElementById('date-to').value = dateTo
+  updateHash()
   loadCurrentModule()
 }
 
@@ -1526,6 +1553,7 @@ function setCurrentYear(btn) {
   dateTo = localDate(now)
   document.getElementById('date-from').value = dateFrom
   document.getElementById('date-to').value = dateTo
+  updateHash()
   loadCurrentModule()
 }
 
@@ -1533,11 +1561,12 @@ function onDateChange() {
   dateFrom = document.getElementById('date-from').value
   dateTo = document.getElementById('date-to').value
   document.querySelectorAll('.tab[id^=quick]').forEach(t => t.classList.remove('active'))
+  updateHash()
   loadCurrentModule()
 }
 
 function dateParams() {
-  return \`from=\${dateFrom}&to=\${dateTo}\`
+  return 'from=' + dateFrom + '&to=' + dateTo
 }
 
 // ═══════════════════════════════════════════
@@ -1553,12 +1582,14 @@ const moduleConfig = {
   organizatori: { title: 'Organizatori',      sub: 'Pregled po organizatorima putovanja' },
 }
 
-function showModule(name) {
+function showModule(name, skipHash) {
   currentModule = name
+  currentTab = ''
   document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'))
   document.getElementById('nav-' + name)?.classList.add('active')
   document.getElementById('page-title').textContent = moduleConfig[name].title
   document.getElementById('page-subtitle').textContent = moduleConfig[name].sub
+  if (!skipHash) updateHash()
   loadCurrentModule()
 }
 
@@ -1568,6 +1599,26 @@ function loadCurrentModule() {
   content.innerHTML = '<div class="loading"><i class="fas fa-circle-notch spin fa-2x"></i><span>Učitavanje podataka...</span></div>'
   const fn = modules[currentModule]
   if (fn) fn()
+}
+
+function _tabClick(tabName, btn, fnName) {
+  currentTab = tabName
+  updateHash()
+  window[fnName](tabName, btn)
+}
+
+function _initModuleTab(fnName, defaultTab) {
+  const tab = currentTab || defaultTab
+  const btns = document.querySelectorAll('#module-content .tab')
+  let btn = null
+  btns.forEach(function(b) {
+    b.classList.remove('active')
+    const oc = b.getAttribute('onclick') || ''
+    if (oc.indexOf("'" + tab + "'") !== -1) btn = b
+  })
+  if (!btn) btn = document.querySelector('#module-content .tab')
+  if (btn) btn.classList.add('active')
+  window[fnName](tab, btn)
 }
 
 function refreshAll() {
@@ -1658,8 +1709,8 @@ const modules = {
 
 pregled: async () => {
   const [kpi, trend] = await Promise.all([
-    axios.get(\`/api/kpi?\${dateParams()}\`),
-    axios.get(\`/api/rezervacije/trend?\${dateParams()}\`)
+    axios.get('/api/kpi?' + dateParams()),
+    axios.get('/api/rezervacije/trend?' + dateParams())
   ])
   const d = kpi.data
   const statusi = d.statusi || []
@@ -1667,73 +1718,37 @@ pregled: async () => {
   const odbijene = statusi.find(s=>s.status==='rejected')?.cnt || 0
   const otkazane = statusi.filter(s=>s.status?.startsWith('cancelled')).reduce((a,s)=>a+parseInt(s.cnt||0),0)
 
-  document.getElementById('module-content').innerHTML = \`
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:24px">
-      <div class="kpi-card kpi-blue">
-        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-ticket-alt mr-1"></i> Ukupno rezervacija</div>
-        <div style="font-size:28px;font-weight:700;color:#f1f5f9">\${fmtInt(d.rezervacije?.total)}</div>
-        <div style="font-size:12px;color:#64748b;margin-top:4px">u izabranom periodu</div>
-      </div>
-      <div class="kpi-card kpi-green">
-        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-euro-sign mr-1"></i> Ukupan prihod</div>
-        <div style="font-size:24px;font-weight:700;color:#10b981">\${fmtEur(d.rezervacije?.ukupno_eur)}</div>
-        <div style="font-size:12px;color:#64748b;margin-top:4px">samo prihvaćene (\${fmtInt(d.rezervacije?.prihvacene_cnt)})</div>
-      </div>
-      <div class="kpi-card kpi-purple">
-        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-check-circle mr-1"></i> Naplaćeno (EUR)</div>
-        <div style="font-size:24px;font-weight:700;color:#8b5cf6">\${fmtEur(d.placanja?.naplaceno_eur)}</div>
-        <div style="font-size:12px;color:#64748b;margin-top:4px">\${fmtInt(d.placanja?.cnt)} uplata</div>
-      </div>
-      <div class="kpi-card kpi-yellow">
-        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-check-double mr-1"></i> Prihvaćene rez.</div>
-        <div style="font-size:28px;font-weight:700;color:#f59e0b">\${fmtInt(prihvacene)}</div>
-        <div style="font-size:12px;color:#64748b;margin-top:4px">od \${fmtInt(d.rezervacije?.total)} kreiranih</div>
-      </div>
-      <div class="kpi-card kpi-red">
-        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-times-circle mr-1"></i> Otkazano / Odbijeno</div>
-        <div style="font-size:28px;font-weight:700;color:#ef4444">\${fmtInt(otkazane + parseInt(odbijene))}</div>
-        <div style="font-size:12px;color:#64748b;margin-top:4px">\${otkazane} otkazano, \${odbijene} odbijeno</div>
-      </div>
-      <div class="kpi-card" style="background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid #334155;border-radius:12px;padding:20px;position:relative;overflow:hidden;">
-        <div style="content:'';position:absolute;top:-30px;right:-30px;width:100px;height:100px;border-radius:50%;opacity:.1;background:#10b981"></div>
-        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-chart-pie mr-1"></i> Naša marža (neto)</div>
-        <div style="font-size:22px;font-weight:700;color:#10b981">\${fmtEur(d.marza?.nasa_marza)}</div>
-        <div style="font-size:12px;color:#64748b;margin-top:4px">Gross: \${fmtEur(d.marza?.gross_marza)}</div>
-        <div style="margin-top:8px;padding-top:8px;border-top:1px solid #1e3a5f">
-          <div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Bez PDV (−20%)</div>
-          <div style="font-size:18px;font-weight:700;color:#34d399">\${fmtEur(d.marza?.nasa_marza * 0.80)}</div>
-        </div>
-      </div>
-      <div class="kpi-card" style="background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid #334155;border-radius:12px;padding:20px;position:relative;overflow:hidden;">
-        <div style="content:'';position:absolute;top:-30px;right:-30px;width:100px;height:100px;border-radius:50%;opacity:.1;background:#f59e0b"></div>
-        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-handshake mr-1"></i> Komisije agencijama</div>
-        <div style="font-size:22px;font-weight:700;color:#f59e0b">\${fmtEur(d.marza?.komisije_agencijama)}</div>
-        <div style="font-size:12px;color:#64748b;margin-top:4px">\${d.marza?.gross_marza>0?fmt(d.marza.komisije_agencijama/d.marza.gross_marza*100,1)+'% od gross marže':'—'}</div>
-      </div>
-    </div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-bar mr-2" style="color:#3b82f6"></i>Trend rezervacija po mesecima</div>
-        <div class="chart-container" style="height:220px"><canvas id="chart-pregled-trend"></canvas></div>
-      </div>
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-pie mr-2" style="color:#10b981"></i>Statusi rezervacija</div>
-        <div class="chart-container" style="height:220px"><canvas id="chart-pregled-status"></canvas></div>
-      </div>
-    </div>
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-money-bill-wave mr-2" style="color:#8b5cf6"></i>Naplate po mesecima (EUR)</div>
-        <div class="chart-container" style="height:220px"><canvas id="chart-pregled-naplate"></canvas></div>
-      </div>
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-info-circle mr-2" style="color:#f59e0b"></i>Platni status rezervacija</div>
-        <div class="chart-container" style="height:220px"><canvas id="chart-pregled-platni"></canvas></div>
-      </div>
-    </div>
-  \`
+  document.getElementById('module-content').innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:24px"> <div class="kpi-card kpi-blue"> <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-ticket-alt mr-1"></i> Ukupno rezervacija</div> <div style="font-size:28px;font-weight:700;color:#f1f5f9">'
+    + fmtInt(d.rezervacije?.total)
+    + '</div>\n        <div style="font-size:12px;color:#64748b;margin-top:4px">u izabranom periodu</div>\n      </div>\n      <div class="kpi-card kpi-green">\n        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-euro-sign mr-1"></i> Ukupan prihod</div>\n        <div style="font-size:24px;font-weight:700;color:#10b981">'
+    + fmtEur(d.rezervacije?.ukupno_eur)
+    + '</div>\n        <div style="font-size:12px;color:#64748b;margin-top:4px">samo prihvaćene ('
+    + fmtInt(d.rezervacije?.prihvacene_cnt)
+    + ')</div>\n      </div>\n      <div class="kpi-card kpi-purple">\n        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-check-circle mr-1"></i> Naplaćeno (EUR)</div>\n        <div style="font-size:24px;font-weight:700;color:#8b5cf6">'
+    + fmtEur(d.placanja?.naplaceno_eur)
+    + '</div>\n        <div style="font-size:12px;color:#64748b;margin-top:4px">'
+    + fmtInt(d.placanja?.cnt)
+    + ' uplata</div>\n      </div>\n      <div class="kpi-card kpi-yellow">\n        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-check-double mr-1"></i> Prihvaćene rez.</div>\n        <div style="font-size:28px;font-weight:700;color:#f59e0b">'
+    + fmtInt(prihvacene)
+    + '</div>\n        <div style="font-size:12px;color:#64748b;margin-top:4px">od '
+    + fmtInt(d.rezervacije?.total)
+    + ' kreiranih</div>\n      </div>\n      <div class="kpi-card kpi-red">\n        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-times-circle mr-1"></i> Otkazano / Odbijeno</div>\n        <div style="font-size:28px;font-weight:700;color:#ef4444">'
+    + fmtInt(otkazane + parseInt(odbijene))
+    + '</div>\n        <div style="font-size:12px;color:#64748b;margin-top:4px">'
+    + otkazane
+    + ' otkazano, '
+    + odbijene
+    + ' odbijeno</div>\n      </div>\n      <div class="kpi-card" style="background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid #334155;border-radius:12px;padding:20px;position:relative;overflow:hidden;">\n        <div style="content:\'\';position:absolute;top:-30px;right:-30px;width:100px;height:100px;border-radius:50%;opacity:.1;background:#10b981"></div>\n        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-chart-pie mr-1"></i> Naša marža (neto)</div>\n        <div style="font-size:22px;font-weight:700;color:#10b981">'
+    + fmtEur(d.marza?.nasa_marza)
+    + '</div>\n        <div style="font-size:12px;color:#64748b;margin-top:4px">Gross: '
+    + fmtEur(d.marza?.gross_marza)
+    + '</div>\n        <div style="margin-top:8px;padding-top:8px;border-top:1px solid #1e3a5f">\n          <div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Bez PDV (−20%)</div>\n          <div style="font-size:18px;font-weight:700;color:#34d399">'
+    + fmtEur(d.marza?.nasa_marza * 0.80)
+    + '</div>\n        </div>\n      </div>\n      <div class="kpi-card" style="background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid #334155;border-radius:12px;padding:20px;position:relative;overflow:hidden;">\n        <div style="content:\'\';position:absolute;top:-30px;right:-30px;width:100px;height:100px;border-radius:50%;opacity:.1;background:#f59e0b"></div>\n        <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px"><i class="fas fa-handshake mr-1"></i> Komisije agencijama</div>\n        <div style="font-size:22px;font-weight:700;color:#f59e0b">'
+    + fmtEur(d.marza?.komisije_agencijama)
+    + '</div>\n        <div style="font-size:12px;color:#64748b;margin-top:4px">'
+    + d.marza?.gross_marza>0?fmt(d.marza.komisije_agencijama/d.marza.gross_marza*100,1)+'% od gross marže':'—'
+    + '</div>\n      </div>\n    </div>\n\n    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">\n      <div class="card">\n        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-bar mr-2" style="color:#3b82f6"></i>Trend rezervacija po mesecima</div>\n        <div class="chart-container" style="height:220px"><canvas id="chart-pregled-trend"></canvas></div>\n      </div>\n      <div class="card">\n        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-pie mr-2" style="color:#10b981"></i>Statusi rezervacija</div>\n        <div class="chart-container" style="height:220px"><canvas id="chart-pregled-status"></canvas></div>\n      </div>\n    </div>\n\n    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">\n      <div class="card">\n        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-money-bill-wave mr-2" style="color:#8b5cf6"></i>Naplate po mesecima (EUR)</div>\n        <div class="chart-container" style="height:220px"><canvas id="chart-pregled-naplate"></canvas></div>\n      </div>\n      <div class="card">\n        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-info-circle mr-2" style="color:#f59e0b"></i>Platni status rezervacija</div>\n        <div class="chart-container" style="height:220px"><canvas id="chart-pregled-platni"></canvas></div>\n      </div>\n    </div>\n  '
 
   const tData = trend.data
   const trendRows = tData.trend || []
@@ -1754,7 +1769,7 @@ pregled: async () => {
   }, { plugins: { legend: { position:'right', labels:{color:'#94a3b8',font:{size:11}} } } })
 
   // naplate
-  const naplate = (await axios.get(\`/api/finansije/trend?\${dateParams()}\`)).data.naplate || []
+  const naplate = (await axios.get('/api/finansije/trend?' + dateParams())).data.naplate || []
   makeChart('chart-pregled-naplate', 'line', {
     labels: naplate.map(r=>r.mesec),
     datasets: [{ label: 'Naplaćeno (EUR)', data: naplate.map(r=>r.naplaceno_eur), borderColor:'#8b5cf6', backgroundColor:'rgba(139,92,246,.15)', fill:true, tension:.4 }]
@@ -1771,43 +1786,22 @@ pregled: async () => {
 // MODULE: FINANSIJE
 // ═══════════════════════════════════════════
 finansije: async () => {
-  const data = (await axios.get(\`/api/finansije/trend?\${dateParams()}\`)).data
+  const data = (await axios.get('/api/finansije/trend?' + dateParams())).data
 
-  document.getElementById('module-content').innerHTML = \`
-    <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap">
-      <button class="tab active" onclick="finTab('prihodi',this)">Prihodi & Marža</button>
-      <button class="tab" onclick="finTab('raspodela',this)">🎯 Raspodela marže</button>
-      <button class="tab" onclick="finTab('naplate',this)">Naplate</button>
-      <button class="tab" onclick="finTab('obroci',this)">Obroci plaćanja</button>
-      <button class="tab" onclick="finTab('bankovni',this)">Bankovni izvodi</button>
-      <button class="tab" onclick="finTab('kurs',this)">Kursna lista</button>
-      <button class="tab" onclick="finTab('troskovi',this)">📊 Troškovi</button>
-      <button class="tab" onclick="finTab('pl',this)">📈 P&L</button>
-    </div>
-    <div id="fin-content"></div>
-  \`
+  document.getElementById('module-content').innerHTML = '<div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap"> <button class="tab active" onclick="_tabClick(\'prihodi\',this,\'finTab\')">Prihodi & Marža</button> <button class="tab" onclick="_tabClick(\'raspodela\',this,\'finTab\')">🎯 Raspodela marže</button> <button class="tab" onclick="_tabClick(\'naplate\',this,\'finTab\')">Naplate</button> <button class="tab" onclick="_tabClick(\'obroci\',this,\'finTab\')">Obroci plaćanja</button> <button class="tab" onclick="_tabClick(\'bankovni\',this,\'finTab\')">Bankovni izvodi</button> <button class="tab" onclick="_tabClick(\'kurs\',this,\'finTab\')">Kursna lista</button> <button class="tab" onclick="_tabClick(\'troskovi\',this,\'finTab\')">📊 Troškovi</button> <button class="tab" onclick="_tabClick(\'pl\',this,\'finTab\')">📈 P&L</button> </div> <div id="fin-content"></div>'
   window.finData = data
-  finTab('prihodi', document.querySelector('.tab.active'))
+  _initModuleTab('finTab', 'prihodi')
 },
 
 // ═══════════════════════════════════════════
 // MODULE: REZERVACIJE
 // ═══════════════════════════════════════════
 rezervacije: async () => {
-  const data = (await axios.get(\`/api/rezervacije/trend?\${dateParams()}\`)).data
+  const data = (await axios.get('/api/rezervacije/trend?' + dateParams())).data
 
-  document.getElementById('module-content').innerHTML = \`
-    <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap">
-      <button class="tab active" onclick="rezTab('trend',this)">Trend</button>
-      <button class="tab" onclick="rezTab('statusi',this)">Statusi</button>
-      <button class="tab" onclick="rezTab('nocenja',this)">Noćenja</button>
-      <button class="tab" onclick="rezTab('otkazivanja',this)">Otkazivanja</button>
-      <button class="tab" onclick="rezTab('checkin',this)">Check-in</button>
-    </div>
-    <div id="rez-content"></div>
-  \`
+  document.getElementById('module-content').innerHTML = '<div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap"> <button class="tab active" onclick="_tabClick(\'trend\',this,\'rezTab\')">Trend</button> <button class="tab" onclick="_tabClick(\'statusi\',this,\'rezTab\')">Statusi</button> <button class="tab" onclick="_tabClick(\'nocenja\',this,\'rezTab\')">Noćenja</button> <button class="tab" onclick="_tabClick(\'otkazivanja\',this,\'rezTab\')">Otkazivanja</button> <button class="tab" onclick="_tabClick(\'checkin\',this,\'rezTab\')">Check-in</button> </div> <div id="rez-content"></div>'
   window.rezData = data
-  rezTab('trend', document.querySelector('.tab.active'))
+  _initModuleTab('rezTab', 'trend')
 },
 
 // ═══════════════════════════════════════════
@@ -1815,20 +1809,13 @@ rezervacije: async () => {
 // ═══════════════════════════════════════════
 agencije: async () => {
   const [lista, rang] = await Promise.all([
-    axios.get(\`/api/agencije/lista?\${dateParams()}&limit=50\`),
-    axios.get(\`/api/agencije/rang?\${dateParams()}\`)
+    axios.get('/api/agencije/lista?' + dateParams() + '&limit=50'),
+    axios.get('/api/agencije/rang?' + dateParams())
   ])
 
-  document.getElementById('module-content').innerHTML = \`
-    <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap">
-      <button class="tab active" onclick="agtTab('rang',this)">Rang lista</button>
-      <button class="tab" onclick="agtTab('grafikon',this)">Grafikon</button>
-      <button class="tab" onclick="agtTab('tabela',this)">Detaljna tabela</button>
-    </div>
-    <div id="agt-content"></div>
-  \`
+  document.getElementById('module-content').innerHTML = '<div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap"> <button class="tab active" onclick="_tabClick(\'rang\',this,\'agtTab\')">Rang lista</button> <button class="tab" onclick="_tabClick(\'grafikon\',this,\'agtTab\')">Grafikon</button> <button class="tab" onclick="_tabClick(\'tabela\',this,\'agtTab\')">Detaljna tabela</button> </div> <div id="agt-content"></div>'
   window.agtData = { lista: lista.data, rang: rang.data }
-  agtTab('rang', document.querySelector('.tab.active'))
+  _initModuleTab('agtTab', 'rang')
 },
 
 // ═══════════════════════════════════════════
@@ -1836,59 +1823,35 @@ agencije: async () => {
 // ═══════════════════════════════════════════
 provajderi: async () => {
   const [lista, fakture] = await Promise.all([
-    axios.get(\`/api/provajderi/lista?\${dateParams()}\`),
-    axios.get(\`/api/provajderi/fakture?\${dateParams()}\`)
+    axios.get('/api/provajderi/lista?' + dateParams()),
+    axios.get('/api/provajderi/fakture?' + dateParams())
   ])
 
-  document.getElementById('module-content').innerHTML = \`
-    <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap">
-      <button class="tab active" onclick="prvTab('pregled',this)">Pregled</button>
-      <button class="tab" onclick="prvTab('fakture',this)">Fakture & Dugovanja</button>
-      <button class="tab" onclick="prvTab('trend',this)">Trend</button>
-    </div>
-    <div id="prv-content"></div>
-  \`
+  document.getElementById('module-content').innerHTML = '<div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap"> <button class="tab active" onclick="_tabClick(\'pregled\',this,\'prvTab\')">Pregled</button> <button class="tab" onclick="_tabClick(\'fakture\',this,\'prvTab\')">Fakture & Dugovanja</button> <button class="tab" onclick="_tabClick(\'trend\',this,\'prvTab\')">Trend</button> </div> <div id="prv-content"></div>'
   window.prvData = { lista: lista.data, fakture: fakture.data }
-  prvTab('pregled', document.querySelector('.tab.active'))
+  _initModuleTab('prvTab', 'pregled')
 },
 
 // ═══════════════════════════════════════════
 // MODULE: USLUGE
 // ═══════════════════════════════════════════
 usluge: async () => {
-  const data = (await axios.get(\`/api/usluge/pregled?\${dateParams()}\`)).data
+  const data = (await axios.get('/api/usluge/pregled?' + dateParams())).data
 
-  document.getElementById('module-content').innerHTML = \`
-    <div class="card" style="margin-bottom:16px">
-      <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-concierge-bell mr-2" style="color:#3b82f6"></i>Tipovi usluga</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px" id="usluge-kpi"></div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Raspodela po tipu</div>
-        <div class="chart-container" style="height:260px"><canvas id="chart-usluge-pie"></canvas></div>
-      </div>
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Trend po mesecima</div>
-        <div class="chart-container" style="height:260px"><canvas id="chart-usluge-trend"></canvas></div>
-      </div>
-    </div>
-    <div class="card">
-      <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Top usluge</div>
-      <div style="overflow:auto;max-height:300px" id="usluge-tabela"></div>
-    </div>
-  \`
+  document.getElementById('module-content').innerHTML = '<div class="card" style="margin-bottom:16px"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-concierge-bell mr-2" style="color:#3b82f6"></i>Tipovi usluga</div> <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px" id="usluge-kpi"></div> </div> <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px"> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Raspodela po tipu</div> <div class="chart-container" style="height:260px"><canvas id="chart-usluge-pie"></canvas></div> </div> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Trend po mesecima</div> <div class="chart-container" style="height:260px"><canvas id="chart-usluge-trend"></canvas></div> </div> </div> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Top usluge</div> <div style="overflow:auto;max-height:300px" id="usluge-tabela"></div> </div>'
 
   const tipovi = data.tipovi || []
   const kpiEl = document.getElementById('usluge-kpi')
   tipovi.forEach((t,i) => {
-    kpiEl.innerHTML += \`
-      <div style="background:#0f172a;border-radius:10px;padding:14px;border:1px solid #334155">
-        <div style="font-size:11px;color:#64748b;margin-bottom:6px">\${SERVICE_LABELS[t.tip]||t.tip}</div>
-        <div style="font-size:20px;font-weight:700;color:\${COLORS[i]}">\${fmtInt(t.broj)}</div>
-        <div style="font-size:12px;color:#475569;margin-top:4px">\${t.valuta==='EUR'?fmtEur(t.ukupno):fmtRsd(t.ukupno)}</div>
-      </div>
-    \`
+    kpiEl.innerHTML += '<div style="background:#0f172a;border-radius:10px;padding:14px;border:1px solid #334155"> <div style="font-size:11px;color:#64748b;margin-bottom:6px">'
+    + SERVICE_LABELS[t.tip]||t.tip
+    + '</div>\n        <div style="font-size:20px;font-weight:700;color:'
+    + COLORS[i]
+    + '">'
+    + fmtInt(t.broj)
+    + '</div>\n        <div style="font-size:12px;color:#475569;margin-top:4px">'
+    + t.valuta==='EUR'?fmtEur(t.ukupno):fmtRsd(t.ukupno)
+    + '</div>\n      </div>\n    '
   })
 
   // Grupiši samo RSD za pie
@@ -1911,55 +1874,32 @@ usluge: async () => {
   }, { scales: { x:{stacked:true,grid:{color:'#1e293b'},ticks:{color:'#64748b'}}, y:{stacked:true,grid:{color:'#1e293b'},ticks:{color:'#64748b'}} } })
 
   const topUsluge = data.top_usluge || []
-  document.getElementById('usluge-tabela').innerHTML = \`
-    <table><thead><tr>
-      <th>Naziv</th><th>Tip</th><th>Provajder</th><th>Broj</th><th>Prihod</th>
-    </tr></thead><tbody>
-    \${topUsluge.map(u=>'<tr>'
+  document.getElementById('usluge-tabela').innerHTML = '<table><thead><tr> <th>Naziv</th><th>Tip</th><th>Provajder</th><th>Broj</th><th>Prihod</th> </tr></thead><tbody>'
+    + topUsluge.map(u=>'<tr>'
       +'<td>'+(u.naziv||'—')+'</td>'
       +'<td><span class="badge badge-blue">'+(SERVICE_LABELS[u.tip]||u.tip)+'</span></td>'
       +'<td>'+(u.provajder||'—')+'</td>'
       +'<td style="font-weight:600">'+fmtInt(u.broj)+'</td>'
       +'<td>'+(u.valuta==='EUR'?fmtEur(u.prihod):fmtRsd(u.prihod))+'</td>'
-      +'</tr>').join('')}
-    </tbody></table>
-  \`
+      +'</tr>').join('')
+    + '</tbody></table>'
 },
 
 // ═══════════════════════════════════════════
 // MODULE: ORGANIZATORI
 // ═══════════════════════════════════════════
 organizatori: async () => {
-  const data = (await axios.get(\`/api/organizatori/pregled?\${dateParams()}\`)).data
+  const data = (await axios.get('/api/organizatori/pregled?' + dateParams())).data
 
-  document.getElementById('module-content').innerHTML = \`
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Prihodi po organizatoru</div>
-        <div class="chart-container" style="height:260px"><canvas id="chart-org-prihod"></canvas></div>
-      </div>
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Broj rezervacija</div>
-        <div class="chart-container" style="height:260px"><canvas id="chart-org-rez"></canvas></div>
-      </div>
-    </div>
-    <div class="card">
-      <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Detalji po organizatoru</div>
-      <div style="overflow:auto">
-        <table><thead><tr>
-          <th>Organizator</th><th>Rezervacije</th><th>Prihod</th><th>Marža</th><th>Avg. noćenja</th>
-        </tr></thead><tbody>
-        \${data.map(o=>'<tr>'
+  document.getElementById('module-content').innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px"> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Prihodi po organizatoru</div> <div class="chart-container" style="height:260px"><canvas id="chart-org-prihod"></canvas></div> </div> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Broj rezervacija</div> <div class="chart-container" style="height:260px"><canvas id="chart-org-rez"></canvas></div> </div> </div> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Detalji po organizatoru</div> <div style="overflow:auto"> <table><thead><tr> <th>Organizator</th><th>Rezervacije</th><th>Prihod</th><th>Marža</th><th>Avg. noćenja</th> </tr></thead><tbody>'
+    + data.map(o=>'<tr>'
           +'<td style="font-weight:600">'+o.organizator+'</td>'
           +'<td>'+fmtInt(o.rezervacije)+'</td>'
           +'<td style="color:#10b981">'+fmtEur(o.prihod)+'</td>'
           +'<td style="color:#8b5cf6">'+fmtEur(o.marza)+'</td>'
           +'<td>'+(o.avg_nocenja?parseFloat(o.avg_nocenja).toFixed(1):'—')+'</td>'
-          +'</tr>').join('')}
-        </tbody></table>
-      </div>
-    </div>
-  \`
+          +'</tr>').join('')
+    + '</tbody></table> </div> </div>'
 
   makeChart('chart-org-prihod', 'bar', {
     labels: data.map(r=>r.organizator),
@@ -1993,66 +1933,28 @@ async function finTab(tab, btn) {
     const totalKomisije = marza.reduce((a,r)=>a+parseFloat(r.komisije_agencijama||0),0)
     const totalNasaMarza = marza.reduce((a,r)=>a+parseFloat(r.nasa_marza||0),0)
     const avgGrossPct = marza.reduce((a,r)=>a+parseFloat(r.gross_marza_pct||0),0)/Math.max(marza.length,1)
-    content.innerHTML = \`
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px;margin-bottom:20px">
-        <div class="kpi-card kpi-green">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-euro-sign mr-1"></i>Ukupan prihod</div>
-          <div style="font-size:22px;font-weight:700;color:#10b981">\${fmtEur(totalPrihod)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">svi prihodi</div>
-        </div>
-        <div class="kpi-card kpi-blue">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-building mr-1"></i>Net troškovi</div>
-          <div style="font-size:22px;font-weight:700;color:#3b82f6">\${fmtEur(totalNet)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">\${totalPrihod>0?fmt(totalNet/totalPrihod*100,1)+'% od prihoda':'—'}</div>
-        </div>
-        <div class="kpi-card kpi-purple">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-layer-group mr-1"></i>Gross marža</div>
-          <div style="font-size:22px;font-weight:700;color:#8b5cf6">\${fmtEur(totalGross)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">\${avgGrossPct.toFixed(1)}% avg</div>
-        </div>
-        <div class="kpi-card kpi-yellow">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-handshake mr-1"></i>Komisije agencijama</div>
-          <div style="font-size:22px;font-weight:700;color:#f59e0b">\${fmtEur(totalKomisije)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">\${totalGross>0?fmt(totalKomisije/totalGross*100,1)+'% od gross':'—'}</div>
-        </div>
-        <div class="kpi-card" style="background:linear-gradient(135deg,#052e16,#0f172a);border:1px solid #166534;border-radius:12px;padding:20px">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-star mr-1" style="color:#10b981"></i>NAŠA MARŽA</div>
-          <div style="font-size:22px;font-weight:700;color:#10b981">\${fmtEur(totalNasaMarza)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">\${totalGross>0?fmt(totalNasaMarza/totalGross*100,1)+'% od gross':'—'}</div>
-          <div style="margin-top:8px;padding-top:8px;border-top:1px solid #166534">
-            <div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Bez PDV (−20%)</div>
-            <div style="font-size:18px;font-weight:700;color:#34d399">\${fmtEur(totalNasaMarza * 0.80)}</div>
-          </div>
-        </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-bar mr-2" style="color:#3b82f6"></i>Prihod i Net troškovi (EUR)</div>
-          <div class="chart-container" style="height:260px"><canvas id="chart-fin-prihodi"></canvas></div>
-        </div>
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-bar mr-2" style="color:#8b5cf6"></i>Gross marža po mesecima</div>
-          <div class="chart-container" style="height:260px"><canvas id="chart-fin-marza"></canvas></div>
-        </div>
-      </div>
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-layer-group mr-2" style="color:#10b981"></i>Raspodela marže po mesecima — 3 sloja</div>
-        <div style="font-size:12px;color:#475569;margin-bottom:16px">Naša marža (zeleno) + Komisije agencijama (žuto) = Gross marža. Donji sloj je Net trošak.</div>
-        <div class="chart-container" style="height:300px"><canvas id="chart-fin-stacked"></canvas></div>
-      </div>
-      <div class="card" style="margin-top:16px">
-        <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-table mr-2" style="color:#34d399"></i>Mesečni pregled marže sa PDV obračunom</div>
-        <div style="font-size:12px;color:#475569;margin-bottom:12px">Naša marža bez PDV = Naša marža × 0.80 (odbitak 20% PDV)</div>
-        <div style="overflow:auto;max-height:320px">
-          <table><thead><tr>
-            <th>Mesec</th>
-            <th>Prihod (EUR)</th>
-            <th>Gross marža</th>
-            <th style="color:#6ee7b7">Naša marža</th>
-            <th style="color:#34d399">Naša marža bez PDV</th>
-            <th>PDV (20%)</th>
-          </tr></thead><tbody>
-          \${marza.map((r,i)=>{
+    content.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px;margin-bottom:20px"> <div class="kpi-card kpi-green"> <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-euro-sign mr-1"></i>Ukupan prihod</div> <div style="font-size:22px;font-weight:700;color:#10b981">'
+    + fmtEur(totalPrihod)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">svi prihodi</div>\n        </div>\n        <div class="kpi-card kpi-blue">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-building mr-1"></i>Net troškovi</div>\n          <div style="font-size:22px;font-weight:700;color:#3b82f6">'
+    + fmtEur(totalNet)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">'
+    + totalPrihod>0?fmt(totalNet/totalPrihod*100,1)+'% od prihoda':'—'
+    + '</div>\n        </div>\n        <div class="kpi-card kpi-purple">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-layer-group mr-1"></i>Gross marža</div>\n          <div style="font-size:22px;font-weight:700;color:#8b5cf6">'
+    + fmtEur(totalGross)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">'
+    + avgGrossPct.toFixed(1)
+    + '% avg</div>\n        </div>\n        <div class="kpi-card kpi-yellow">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-handshake mr-1"></i>Komisije agencijama</div>\n          <div style="font-size:22px;font-weight:700;color:#f59e0b">'
+    + fmtEur(totalKomisije)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">'
+    + totalGross>0?fmt(totalKomisije/totalGross*100,1)+'% od gross':'—'
+    + '</div>\n        </div>\n        <div class="kpi-card" style="background:linear-gradient(135deg,#052e16,#0f172a);border:1px solid #166534;border-radius:12px;padding:20px">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-star mr-1" style="color:#10b981"></i>NAŠA MARŽA</div>\n          <div style="font-size:22px;font-weight:700;color:#10b981">'
+    + fmtEur(totalNasaMarza)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">'
+    + totalGross>0?fmt(totalNasaMarza/totalGross*100,1)+'% od gross':'—'
+    + '</div>\n          <div style="margin-top:8px;padding-top:8px;border-top:1px solid #166534">\n            <div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Bez PDV (−20%)</div>\n            <div style="font-size:18px;font-weight:700;color:#34d399">'
+    + fmtEur(totalNasaMarza * 0.80)
+    + '</div>\n          </div>\n        </div>\n      </div>\n      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">\n        <div class="card">\n          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-bar mr-2" style="color:#3b82f6"></i>Prihod i Net troškovi (EUR)</div>\n          <div class="chart-container" style="height:260px"><canvas id="chart-fin-prihodi"></canvas></div>\n        </div>\n        <div class="card">\n          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-bar mr-2" style="color:#8b5cf6"></i>Gross marža po mesecima</div>\n          <div class="chart-container" style="height:260px"><canvas id="chart-fin-marza"></canvas></div>\n        </div>\n      </div>\n      <div class="card">\n        <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-layer-group mr-2" style="color:#10b981"></i>Raspodela marže po mesecima — 3 sloja</div>\n        <div style="font-size:12px;color:#475569;margin-bottom:16px">Naša marža (zeleno) + Komisije agencijama (žuto) = Gross marža. Donji sloj je Net trošak.</div>\n        <div class="chart-container" style="height:300px"><canvas id="chart-fin-stacked"></canvas></div>\n      </div>\n      <div class="card" style="margin-top:16px">\n        <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-table mr-2" style="color:#34d399"></i>Mesečni pregled marže sa PDV obračunom</div>\n        <div style="font-size:12px;color:#475569;margin-bottom:12px">Naša marža bez PDV = Naša marža × 0.80 (odbitak 20% PDV)</div>\n        <div style="overflow:auto;max-height:320px">\n          <table><thead><tr>\n            <th>Mesec</th>\n            <th>Prihod (EUR)</th>\n            <th>Gross marža</th>\n            <th style="color:#6ee7b7">Naša marža</th>\n            <th style="color:#34d399">Naša marža bez PDV</th>\n            <th>PDV (20%)</th>\n          </tr></thead><tbody>\n          '
+    + marza.map((r,i)=>{
             const prihod = parseFloat(prihodi[i]?.prihod_eur||0)
             const nm = parseFloat(r.nasa_marza||0)
             const nmBezPdv = nm * 0.80
@@ -2065,19 +1967,17 @@ async function finTab(tab, btn) {
               +'<td style="color:#34d399;font-weight:700">'+fmtEur(nmBezPdv)+'</td>'
               +'<td style="color:#ef4444;font-size:12px">'+fmtEur(pdvIznos)+'</td>'
               +'</tr>'
-          }).join('')}
-          <tr style="background:#0f172a;font-weight:700;border-top:2px solid #334155">
-            <td style="color:#f1f5f9">UKUPNO</td>
-            <td style="color:#10b981">\${fmtEur(totalPrihod)}</td>
-            <td style="color:#8b5cf6">\${fmtEur(totalGross)}</td>
-            <td style="color:#10b981">\${fmtEur(totalNasaMarza)}</td>
-            <td style="color:#34d399">\${fmtEur(totalNasaMarza * 0.80)}</td>
-            <td style="color:#ef4444">\${fmtEur(totalNasaMarza * 0.20)}</td>
-          </tr>
-          </tbody></table>
-        </div>
-      </div>
-    \`
+    + ').join(\'\')}\n          <tr style="background:#0f172a;font-weight:700;border-top:2px solid #334155">\n            <td style="color:#f1f5f9">UKUPNO</td>\n            <td style="color:#10b981">'
+    + fmtEur(totalPrihod)
+    + '</td>\n            <td style="color:#8b5cf6">'
+    + fmtEur(totalGross)
+    + '</td>\n            <td style="color:#10b981">'
+    + fmtEur(totalNasaMarza)
+    + '</td>\n            <td style="color:#34d399">'
+    + fmtEur(totalNasaMarza * 0.80)
+    + '</td>\n            <td style="color:#ef4444">'
+    + fmtEur(totalNasaMarza * 0.20)
+    + '</td>\n          </tr>\n          </tbody></table>\n        </div>\n      </div>\n    '
     makeChart('chart-fin-prihodi', 'bar', {
       labels: prihodi.map(r=>r.mesec),
       datasets: [
@@ -2111,7 +2011,7 @@ async function finTab(tab, btn) {
   }
 
   else if (tab === 'raspodela') {
-    const rData = (await axios.get(\`/api/finansije/raspodela-marze?\${dateParams()}\`)).data
+    const rData = (await axios.get('/api/finansije/raspodela-marze?' + dateParams())).data
     const mesecni = rData.mesecni || []
     const god = rData.godisnji || {}
     const totalPrihod = parseFloat(god.ukupan_prihod||0)
@@ -2119,67 +2019,32 @@ async function finTab(tab, btn) {
     const totalGross = parseFloat(god.gross_marza||0)
     const totalKom = parseFloat(god.komisije_agencijama||0)
     const totalNasa = parseFloat(god.nasa_marza||0)
-    content.innerHTML = \`
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px">
-        <div class="kpi-card kpi-green">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-euro-sign mr-1"></i>Ukupan prihod</div>
-          <div style="font-size:22px;font-weight:700;color:#10b981">\${fmtEur(totalPrihod)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">100% prihoda</div>
-        </div>
-        <div class="kpi-card kpi-blue">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-building mr-1"></i>Net troškovi</div>
-          <div style="font-size:22px;font-weight:700;color:#3b82f6">\${fmtEur(totalNet)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">\${totalPrihod>0?fmt(totalNet/totalPrihod*100,1)+'% od prihoda':'—'}</div>
-        </div>
-        <div class="kpi-card kpi-purple">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-layer-group mr-1"></i>Gross marža</div>
-          <div style="font-size:22px;font-weight:700;color:#8b5cf6">\${fmtEur(totalGross)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">\${totalPrihod>0?fmt(totalGross/totalPrihod*100,1)+'% od prihoda':'—'}</div>
-        </div>
-        <div class="kpi-card kpi-yellow">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-handshake mr-1"></i>Komisije agencijama</div>
-          <div style="font-size:22px;font-weight:700;color:#f59e0b">\${fmtEur(totalKom)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">\${totalGross>0?fmt(totalKom/totalGross*100,1)+'% od gross':'—'}</div>
-        </div>
-        <div class="kpi-card" style="background:linear-gradient(135deg,#052e16,#0f172a);border:2px solid #166534;border-radius:12px;padding:20px">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-star mr-1" style="color:#10b981"></i>NAŠA MARŽA</div>
-          <div style="font-size:24px;font-weight:700;color:#10b981">\${fmtEur(totalNasa)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">\${totalGross>0?fmt(totalNasa/totalGross*100,1)+'% od gross':'—'} • \${god.broj_rezervacija||0} rez.</div>
-          <div style="margin-top:8px;padding-top:8px;border-top:1px solid #166534">
-            <div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Bez PDV (−20%)</div>
-            <div style="font-size:20px;font-weight:700;color:#34d399">\${fmtEur(totalNasa * 0.80)}</div>
-            <div style="font-size:11px;color:#475569;margin-top:2px">PDV: \${fmtEur(totalNasa * 0.20)}</div>
-          </div>
-        </div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-layer-group mr-2" style="color:#10b981"></i>Raspodela svakog EUR prihoda po mesecima</div>
-          <div style="font-size:12px;color:#475569;margin-bottom:14px">Stacked = Net trošak (plavo) + Komisije agencijama (žuto) + Naša marža (zeleno)</div>
-          <div class="chart-container" style="height:300px"><canvas id="chart-rasp-stack"></canvas></div>
-        </div>
-        <div class="card" style="display:flex;flex-direction:column;justify-content:center;align-items:center">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9;text-align:center">Ukupna raspodela prihoda</div>
-          <div class="chart-container" style="height:240px;width:240px"><canvas id="chart-rasp-donut"></canvas></div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9">Mesečni detalji raspodele</div>
-        <div style="font-size:12px;color:#475569;margin-bottom:12px">Naša marža bez PDV = Naša marža × 0.80 (odbitak 20% PDV)</div>
-        <div style="overflow:auto;max-height:320px">
-          <table><thead><tr>
-            <th>Mesec</th>
-            <th>Ukupan prihod</th>
-            <th>Net trošak</th>
-            <th>Gross marža</th>
-            <th style="color:#fcd34d">Komisije agt.</th>
-            <th style="color:#6ee7b7">Naša marža</th>
-            <th style="color:#34d399">Bez PDV</th>
-            <th style="color:#f87171">PDV (20%)</th>
-          </tr></thead><tbody>
-          \${mesecni.map(r=>{
+    content.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px"> <div class="kpi-card kpi-green"> <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-euro-sign mr-1"></i>Ukupan prihod</div> <div style="font-size:22px;font-weight:700;color:#10b981">'
+    + fmtEur(totalPrihod)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">100% prihoda</div>\n        </div>\n        <div class="kpi-card kpi-blue">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-building mr-1"></i>Net troškovi</div>\n          <div style="font-size:22px;font-weight:700;color:#3b82f6">'
+    + fmtEur(totalNet)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">'
+    + totalPrihod>0?fmt(totalNet/totalPrihod*100,1)+'% od prihoda':'—'
+    + '</div>\n        </div>\n        <div class="kpi-card kpi-purple">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-layer-group mr-1"></i>Gross marža</div>\n          <div style="font-size:22px;font-weight:700;color:#8b5cf6">'
+    + fmtEur(totalGross)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">'
+    + totalPrihod>0?fmt(totalGross/totalPrihod*100,1)+'% od prihoda':'—'
+    + '</div>\n        </div>\n        <div class="kpi-card kpi-yellow">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-handshake mr-1"></i>Komisije agencijama</div>\n          <div style="font-size:22px;font-weight:700;color:#f59e0b">'
+    + fmtEur(totalKom)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">'
+    + totalGross>0?fmt(totalKom/totalGross*100,1)+'% od gross':'—'
+    + '</div>\n        </div>\n        <div class="kpi-card" style="background:linear-gradient(135deg,#052e16,#0f172a);border:2px solid #166534;border-radius:12px;padding:20px">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-star mr-1" style="color:#10b981"></i>NAŠA MARŽA</div>\n          <div style="font-size:24px;font-weight:700;color:#10b981">'
+    + fmtEur(totalNasa)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">'
+    + totalGross>0?fmt(totalNasa/totalGross*100,1)+'% od gross':'—'
+    + ' • '
+    + god.broj_rezervacija||0
+    + ' rez.</div>\n          <div style="margin-top:8px;padding-top:8px;border-top:1px solid #166534">\n            <div style="font-size:10px;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Bez PDV (−20%)</div>\n            <div style="font-size:20px;font-weight:700;color:#34d399">'
+    + fmtEur(totalNasa * 0.80)
+    + '</div>\n            <div style="font-size:11px;color:#475569;margin-top:2px">PDV: '
+    + fmtEur(totalNasa * 0.20)
+    + '</div>\n          </div>\n        </div>\n      </div>\n\n      <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">\n        <div class="card">\n          <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-layer-group mr-2" style="color:#10b981"></i>Raspodela svakog EUR prihoda po mesecima</div>\n          <div style="font-size:12px;color:#475569;margin-bottom:14px">Stacked = Net trošak (plavo) + Komisije agencijama (žuto) + Naša marža (zeleno)</div>\n          <div class="chart-container" style="height:300px"><canvas id="chart-rasp-stack"></canvas></div>\n        </div>\n        <div class="card" style="display:flex;flex-direction:column;justify-content:center;align-items:center">\n          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9;text-align:center">Ukupna raspodela prihoda</div>\n          <div class="chart-container" style="height:240px;width:240px"><canvas id="chart-rasp-donut"></canvas></div>\n        </div>\n      </div>\n\n      <div class="card">\n        <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9">Mesečni detalji raspodele</div>\n        <div style="font-size:12px;color:#475569;margin-bottom:12px">Naša marža bez PDV = Naša marža × 0.80 (odbitak 20% PDV)</div>\n        <div style="overflow:auto;max-height:320px">\n          <table><thead><tr>\n            <th>Mesec</th>\n            <th>Ukupan prihod</th>\n            <th>Net trošak</th>\n            <th>Gross marža</th>\n            <th style="color:#fcd34d">Komisije agt.</th>\n            <th style="color:#6ee7b7">Naša marža</th>\n            <th style="color:#34d399">Bez PDV</th>\n            <th style="color:#f87171">PDV (20%)</th>\n          </tr></thead><tbody>\n          '
+    + mesecni.map(r=>{
             const gm = parseFloat(r.gross_marza||0)
             const nm = parseFloat(r.nasa_marza||0)
             const nmBezPdv = nm * 0.80
@@ -2195,21 +2060,21 @@ async function finTab(tab, btn) {
               +'<td style="color:#34d399;font-weight:700">'+fmtEur(nmBezPdv)+'</td>'
               +'<td style="color:#ef4444;font-size:12px">'+fmtEur(pdvIznos)+'</td>'
               +'</tr>'
-          }).join('')}
-          <tr style="background:#0f172a;font-weight:700;border-top:2px solid #334155">
-            <td style="color:#f1f5f9">UKUPNO</td>
-            <td style="color:#10b981">\${fmtEur(totalPrihod)}</td>
-            <td style="color:#3b82f6">\${fmtEur(totalNet)}</td>
-            <td style="color:#8b5cf6">\${fmtEur(totalGross)}</td>
-            <td style="color:#f59e0b">\${fmtEur(totalKom)}</td>
-            <td style="color:#10b981">\${fmtEur(totalNasa)}</td>
-            <td style="color:#34d399">\${fmtEur(totalNasa * 0.80)}</td>
-            <td style="color:#ef4444">\${fmtEur(totalNasa * 0.20)}</td>
-          </tr>
-          </tbody></table>
-        </div>
-      </div>
-    \`
+    + ').join(\'\')}\n          <tr style="background:#0f172a;font-weight:700;border-top:2px solid #334155">\n            <td style="color:#f1f5f9">UKUPNO</td>\n            <td style="color:#10b981">'
+    + fmtEur(totalPrihod)
+    + '</td>\n            <td style="color:#3b82f6">'
+    + fmtEur(totalNet)
+    + '</td>\n            <td style="color:#8b5cf6">'
+    + fmtEur(totalGross)
+    + '</td>\n            <td style="color:#f59e0b">'
+    + fmtEur(totalKom)
+    + '</td>\n            <td style="color:#10b981">'
+    + fmtEur(totalNasa)
+    + '</td>\n            <td style="color:#34d399">'
+    + fmtEur(totalNasa * 0.80)
+    + '</td>\n            <td style="color:#ef4444">'
+    + fmtEur(totalNasa * 0.20)
+    + '</td>\n          </tr>\n          </tbody></table>\n        </div>\n      </div>\n    '
     // Stacked bar
     makeChart('chart-rasp-stack','bar',{
       labels: mesecni.map(r=>r.mesec),
@@ -2236,23 +2101,14 @@ async function finTab(tab, btn) {
 
   else if (tab === 'naplate') {
     const naplate = window.finData.naplate || []
-    content.innerHTML = \`
-      <div class="card" style="margin-bottom:16px">
-        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Naplate po mesecima</div>
-        <div class="chart-container" style="height:300px"><canvas id="chart-fin-naplate"></canvas></div>
-      </div>
-      <div class="card">
-        <div style="overflow:auto;max-height:300px">
-          <table><thead><tr><th>Mesec</th><th>Naplaćeno (EUR)</th><th>Naplaćeno (RSD)</th><th>Broj uplata</th></tr></thead>
-          <tbody>\${naplate.map(r=>'<tr>'
+    content.innerHTML = '<div class="card" style="margin-bottom:16px"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Naplate po mesecima</div> <div class="chart-container" style="height:300px"><canvas id="chart-fin-naplate"></canvas></div> </div> <div class="card"> <div style="overflow:auto;max-height:300px"> <table><thead><tr><th>Mesec</th><th>Naplaćeno (EUR)</th><th>Naplaćeno (RSD)</th><th>Broj uplata</th></tr></thead> <tbody>'
+    + naplate.map(r=>'<tr>'
             +'<td>'+r.mesec+'</td>'
             +'<td style="color:#10b981;font-weight:600">'+fmtEur(r.naplaceno_eur)+'</td>'
             +'<td>'+fmtRsd(r.naplaceno_rsd)+'</td>'
             +'<td>'+fmtInt(r.broj_uplata)+'</td>'
-            +'</tr>').join('')}</tbody></table>
-        </div>
-      </div>
-    \`
+            +'</tr>').join('')
+    + '</tbody></table>\n        </div>\n      </div>\n    '
     makeChart('chart-fin-naplate', 'line', {
       labels: naplate.map(r=>r.mesec),
       datasets: [
@@ -2267,18 +2123,11 @@ async function finTab(tab, btn) {
   }
 
   else if (tab === 'obroci') {
-    const rows = (await axios.get(\`/api/finansije/obroci?status=pending\`)).data
-    content.innerHTML = \`
-      <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-          <div style="font-weight:600;font-size:14px;color:#f1f5f9"><i class="fas fa-calendar-alt mr-2" style="color:#f59e0b"></i>Obroci plaćanja na čekanju</div>
-          <span class="badge badge-yellow">\${rows.length} obroka</span>
-        </div>
-        <div style="overflow:auto;max-height:500px">
-          <table><thead><tr>
-            <th>Dospeće</th><th>Rezervacija</th><th>Agencija</th><th>Hotel</th><th>Check-in</th><th>Iznos</th><th>Procenat</th>
-          </tr></thead><tbody>
-          \${rows.map(r=>'<tr>'
+    const rows = (await axios.get('/api/finansije/obroci?status=pending')).data
+    content.innerHTML = '<div class="card"> <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px"> <div style="font-weight:600;font-size:14px;color:#f1f5f9"><i class="fas fa-calendar-alt mr-2" style="color:#f59e0b"></i>Obroci plaćanja na čekanju</div> <span class="badge badge-yellow">'
+    + rows.length
+    + ' obroka</span>\n        </div>\n        <div style="overflow:auto;max-height:500px">\n          <table><thead><tr>\n            <th>Dospeće</th><th>Rezervacija</th><th>Agencija</th><th>Hotel</th><th>Check-in</th><th>Iznos</th><th>Procenat</th>\n          </tr></thead><tbody>\n          '
+    + rows.map(r=>'<tr>'
             +'<td style="color:'+(new Date(r.due_at)<new Date()?'#ef4444':'#f59e0b')+';font-weight:600">'+(r.due_at||'—')+'</td>'
             +'<td><code style="font-size:11px;color:#60a5fa">'+r.reference+'</code></td>'
             +'<td>'+(r.agencija||'—')+'</td>'
@@ -2286,56 +2135,39 @@ async function finTab(tab, btn) {
             +'<td>'+(r.checkin||'—')+'</td>'
             +'<td style="font-weight:600;color:#f59e0b">'+(r.currency==='EUR'?fmtEur(r.amount):fmtRsd(r.amount))+'</td>'
             +'<td>'+r.percentage+'%</td>'
-            +'</tr>').join('')}
-          </tbody></table>
-        </div>
-      </div>
-    \`
+            +'</tr>').join('')
+    + '</tbody></table> </div> </div>'
   }
 
   else if (tab === 'bankovni') {
-    const data = (await axios.get(\`/api/finansije/bankovni-izvodi?\${dateParams()}\`)).data
+    const data = (await axios.get('/api/finansije/bankovni-izvodi?' + dateParams())).data
     const izvodi = data.izvodi || []
     const stats = data.stats || {}
-    content.innerHTML = \`
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:16px">
-        <div class="kpi-card kpi-green"><div style="font-size:11px;color:#64748b;margin-bottom:6px">Ukupno primljeno (RSD)</div><div style="font-size:20px;font-weight:700;color:#10b981">\${fmtRsd(stats.ukupno_rsd)}</div></div>
-        <div class="kpi-card kpi-blue"><div style="font-size:11px;color:#64748b;margin-bottom:6px">Stavki ukupno</div><div style="font-size:20px;font-weight:700;color:#3b82f6">\${fmtInt(stats.broj_stavki)}</div></div>
-        <div class="kpi-card kpi-green"><div style="font-size:11px;color:#64748b;margin-bottom:6px">Upareno sa rez.</div><div style="font-size:20px;font-weight:700;color:#10b981">\${fmtInt(stats.matched)}</div></div>
-        <div class="kpi-card kpi-red"><div style="font-size:11px;color:#64748b;margin-bottom:6px">Nije upareno</div><div style="font-size:20px;font-weight:700;color:#ef4444">\${fmtInt(stats.unmatched)}</div></div>
-      </div>
-      <div class="card">
-        <div style="overflow:auto;max-height:400px">
-          <table><thead><tr>
-            <th>Datum</th><th>Broj izvoda</th><th>Partija</th><th>Preth. stanje</th><th>Novo stanje</th><th>Potražni promet</th>
-          </tr></thead><tbody>
-          \${izvodi.map(i=>'<tr>'
+    content.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-bottom:16px"> <div class="kpi-card kpi-green"><div style="font-size:11px;color:#64748b;margin-bottom:6px">Ukupno primljeno (RSD)</div><div style="font-size:20px;font-weight:700;color:#10b981">'
+    + fmtRsd(stats.ukupno_rsd)
+    + '</div></div>\n        <div class="kpi-card kpi-blue"><div style="font-size:11px;color:#64748b;margin-bottom:6px">Stavki ukupno</div><div style="font-size:20px;font-weight:700;color:#3b82f6">'
+    + fmtInt(stats.broj_stavki)
+    + '</div></div>\n        <div class="kpi-card kpi-green"><div style="font-size:11px;color:#64748b;margin-bottom:6px">Upareno sa rez.</div><div style="font-size:20px;font-weight:700;color:#10b981">'
+    + fmtInt(stats.matched)
+    + '</div></div>\n        <div class="kpi-card kpi-red"><div style="font-size:11px;color:#64748b;margin-bottom:6px">Nije upareno</div><div style="font-size:20px;font-weight:700;color:#ef4444">'
+    + fmtInt(stats.unmatched)
+    + '</div></div>\n      </div>\n      <div class="card">\n        <div style="overflow:auto;max-height:400px">\n          <table><thead><tr>\n            <th>Datum</th><th>Broj izvoda</th><th>Partija</th><th>Preth. stanje</th><th>Novo stanje</th><th>Potražni promet</th>\n          </tr></thead><tbody>\n          '
+    + izvodi.map(i=>'<tr>'
             +'<td>'+i.datum_izvoda+'</td>'
             +'<td><code style="font-size:11px;color:#60a5fa">'+(i.broj_izvoda||'—')+'</code></td>'
             +'<td style="font-size:12px;color:#94a3b8">'+(i.partija||'—')+'</td>'
             +'<td>'+fmtRsd(i.prethodno_stanje)+'</td>'
             +'<td style="font-weight:600;color:#10b981">'+fmtRsd(i.novo_stanje)+'</td>'
             +'<td style="color:#3b82f6">'+fmtRsd(i.potrazni_promet)+'</td>'
-            +'</tr>').join('')}
-          </tbody></table>
-        </div>
-      </div>
-    \`
+            +'</tr>').join('')
+    + '</tbody></table> </div> </div>'
   }
 
   else if (tab === 'kurs') {
     const rows = (await axios.get('/api/finansije/kurs')).data
-    content.innerHTML = \`
-      <div class="card" style="margin-bottom:16px">
-        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">EUR/RSD kursna lista (poslednja 90 dana)</div>
-        <div class="chart-container" style="height:280px"><canvas id="chart-fin-kurs"></canvas></div>
-      </div>
-      <div class="card"><div style="overflow:auto;max-height:300px">
-        <table><thead><tr><th>Datum</th><th>Kurs (EUR/RSD)</th></tr></thead>
-        <tbody>\${rows.map(r=>'<tr><td>'+r.date+'</td><td style="font-weight:600;color:#f59e0b">'+fmt(r.value,4)+'</td></tr>').join('')}
-        </tbody></table>
-      </div></div>
-    \`
+    content.innerHTML = '<div class="card" style="margin-bottom:16px"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">EUR/RSD kursna lista (poslednja 90 dana)</div> <div class="chart-container" style="height:280px"><canvas id="chart-fin-kurs"></canvas></div> </div> <div class="card"><div style="overflow:auto;max-height:300px"> <table><thead><tr><th>Datum</th><th>Kurs (EUR/RSD)</th></tr></thead> <tbody>'
+    + rows.map(r=>'<tr><td>'+r.date+'</td><td style="font-weight:600;color:#f59e0b">'+fmt(r.value,4)+'</td></tr>').join('')
+    + '</tbody></table> </div></div>'
     const sorted = [...rows].sort((a,b)=>a.date.localeCompare(b.date))
     makeChart('chart-fin-kurs','line',{
       labels: sorted.map(r=>r.date),
@@ -2350,12 +2182,14 @@ async function finTab(tab, btn) {
     try {
       data = (await axios.get('/api/troskovi')).data
     } catch(e) {
-      content.innerHTML = \`<div class="card" style="color:#ef4444;padding:32px;text-align:center"><i class="fas fa-exclamation-triangle mr-2"></i>Greška pri učitavanju troškova. Proverite Sheets secrets.</div>\`
+      content.innerHTML = '<div class="card" style="color:#ef4444;padding:32px;text-align:center"><i class="fas fa-exclamation-triangle mr-2"></i>Greška pri učitavanju troškova. Proverite Sheets secrets.</div>'
       return
     }
 
     if (data.error) {
-      content.innerHTML = \`<div class="card" style="color:#ef4444;padding:32px;text-align:center"><i class="fas fa-exclamation-triangle mr-2"></i>\${data.error}</div>\`
+      content.innerHTML = '<div class="card" style="color:#ef4444;padding:32px;text-align:center"><i class="fas fa-exclamation-triangle mr-2"></i>'
+    + data.error
+    + '</div>'
       return
     }
 
@@ -2368,35 +2202,27 @@ async function finTab(tab, btn) {
     const MESECI_IME = ['jan','feb','mar','apr','maj','jun','jul','avg','sep','okt','nov','dec']
 
     // KPI kartice
-    const kpiHtml = \`
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px;margin-bottom:20px">
-        <div class="kpi-card kpi-red">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-users mr-1"></i>Plate</div>
-          <div style="font-size:20px;font-weight:700;color:#ef4444">\${fmtEur(tp.eur)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">\${fmtRsd(tp.rsd)}</div>
-        </div>
-        <div class="kpi-card kpi-yellow">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-cogs mr-1"></i>Operativni</div>
-          <div style="font-size:20px;font-weight:700;color:#f59e0b">\${fmtEur(to.eur)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">\${fmtRsd(to.rsd)}</div>
-        </div>
-        <div class="kpi-card kpi-purple">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-code mr-1"></i>Razvoj</div>
-          <div style="font-size:20px;font-weight:700;color:#8b5cf6">\${fmtEur(tr.eur)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">\${fmtRsd(tr.rsd)}</div>
-        </div>
-        <div class="kpi-card" style="background:linear-gradient(135deg,#450a0a,#0f172a);border:2px solid #7f1d1d;border-radius:12px;padding:20px">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-money-bill-wave mr-1" style="color:#f87171"></i>UKUPNI RASHODI</div>
-          <div style="font-size:22px;font-weight:700;color:#f87171">\${fmtEur(ts.eur)}</div>
-          <div style="font-size:12px;color:#ef4444;margin-top:4px">\${fmtRsd(ts.rsd)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">Kurs: 1 EUR ≈ \${fmt(kurs,2)} RSD</div>
-        </div>
-        <div class="kpi-card kpi-blue">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-list mr-1"></i>Kategorija</div>
-          <div style="font-size:22px;font-weight:700;color:#3b82f6">\${kat.length}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">aktivnih troškova</div>
-        </div>
-      </div>\`
+    const kpiHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px;margin-bottom:20px"> <div class="kpi-card kpi-red"> <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-users mr-1"></i>Plate</div> <div style="font-size:20px;font-weight:700;color:#ef4444">'
+    + fmtEur(tp.eur)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">'
+    + fmtRsd(tp.rsd)
+    + '</div>\n        </div>\n        <div class="kpi-card kpi-yellow">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-cogs mr-1"></i>Operativni</div>\n          <div style="font-size:20px;font-weight:700;color:#f59e0b">'
+    + fmtEur(to.eur)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">'
+    + fmtRsd(to.rsd)
+    + '</div>\n        </div>\n        <div class="kpi-card kpi-purple">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-code mr-1"></i>Razvoj</div>\n          <div style="font-size:20px;font-weight:700;color:#8b5cf6">'
+    + fmtEur(tr.eur)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">'
+    + fmtRsd(tr.rsd)
+    + '</div>\n        </div>\n        <div class="kpi-card" style="background:linear-gradient(135deg,#450a0a,#0f172a);border:2px solid #7f1d1d;border-radius:12px;padding:20px">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-money-bill-wave mr-1" style="color:#f87171"></i>UKUPNI RASHODI</div>\n          <div style="font-size:22px;font-weight:700;color:#f87171">'
+    + fmtEur(ts.eur)
+    + '</div>\n          <div style="font-size:12px;color:#ef4444;margin-top:4px">'
+    + fmtRsd(ts.rsd)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">Kurs: 1 EUR ≈ '
+    + fmt(kurs,2)
+    + ' RSD</div>\n        </div>\n        <div class="kpi-card kpi-blue">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-list mr-1"></i>Kategorija</div>\n          <div style="font-size:22px;font-weight:700;color:#3b82f6">'
+    + kat.length
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">aktivnih troškova</div>\n        </div>\n      </div>'
 
     // Tabela po kategorijama × meseci
     const sekcije = ['Plate','Operativni','Razvoj']
@@ -2412,67 +2238,74 @@ async function finTab(tab, btn) {
       const stavke = kat.filter((k) => k.sekcija === sek)
       if (stavke.length === 0) continue
       // Sekcija header
-      tabelaRows += \`<tr style="background:#0f172a">
-        <td colspan="\${12+3}" style="font-weight:700;color:\${sekcijaColors[sek]};padding:10px 12px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;border-top:2px solid \${sekcijaColors[sek]}44">
-          <i class="fas fa-\${sek==='Plate'?'users':sek==='Operativni'?'cogs':'code'} mr-1"></i>\${sek}
-          &nbsp;<span style="color:#475569;font-size:11px;font-weight:400;text-transform:none">Ukupno: <span style="color:\${sekcijaColors[sek]}">\${fmtEur(sekcijaTotal[sek].eur)}</span> / \${fmtRsd(sekcijaTotal[sek].rsd)}</span>
-        </td>
-      </tr>\`
+      tabelaRows += '<tr style="background:#0f172a">\n        <td colspan="'
+    + 12+3
+    + '" style="font-weight:700;color:'
+    + sekcijaColors[sek]
+    + ';padding:10px 12px;font-size:13px;text-transform:uppercase;letter-spacing:.06em;border-top:2px solid '
+    + sekcijaColors[sek]
+    + '44">\n          <i class="fas fa-'
+    + sek==='Plate'?'users':sek==='Operativni'?'cogs':'code'
+    + ' mr-1"></i>'
+    + sek
+    + '&nbsp;<span style="color:#475569;font-size:11px;font-weight:400;text-transform:none">Ukupno: <span style="color:'
+    + sekcijaColors[sek]
+    + '">'
+    + fmtEur(sekcijaTotal[sek].eur)
+    + '</span> / '
+    + fmtRsd(sekcijaTotal[sek].rsd)
+    + '</span>\n        </td>\n      </tr>'
       for (const k of stavke) {
-        tabelaRows += \`<tr>
-          <td style="font-size:12px;color:#94a3b8;padding-left:20px">\${k.naziv}</td>
-          \${k.meseci.map((v) => v > 0
+        tabelaRows += '<tr>\n          <td style="font-size:12px;color:#94a3b8;padding-left:20px">'
+    + k.naziv
+    + '</td>\n          '
+    + k.meseci.map((v) => v > 0
             ? '<td style="color:#fca5a5;font-size:12px;text-align:right">'+fmt(v,0)+'</td>'
             : '<td style="color:#334155;font-size:11px;text-align:right">—</td>'
-          ).join('')}
-          <td style="color:\${sekcijaColors[sek]};font-weight:600;text-align:right">\${fmtEur(k.ukupnoEur)}</td>
-          <td style="color:#94a3b8;font-size:12px;text-align:right">\${fmtRsd(k.ukupnoRsd)}</td>
-        </tr>\`
+          ).join('')
+    + '<td style="color:'
+    + sekcijaColors[sek]
+    + ';font-weight:600;text-align:right">'
+    + fmtEur(k.ukupnoEur)
+    + '</td>\n          <td style="color:#94a3b8;font-size:12px;text-align:right">'
+    + fmtRsd(k.ukupnoRsd)
+    + '</td>\n        </tr>'
       }
       // Sekcija total red
       const totM = sek==='Plate' ? tp.meseci : sek==='Operativni' ? to.meseci : tr.meseci
-      tabelaRows += \`<tr style="background:#1a2235;font-weight:700">
-        <td style="color:\${sekcijaColors[sek]}">Total \${sek}</td>
-        \${(totM||[]).map((v) => '<td style="color:'+sekcijaColors[sek]+';text-align:right;font-weight:700">'+(v>0?fmt(v,0):'—')+'</td>').join('')}
-        <td style="color:\${sekcijaColors[sek]};text-align:right">\${fmtEur(sekcijaTotal[sek].eur)}</td>
-        <td style="color:\${sekcijaColors[sek]};text-align:right">\${fmtRsd(sekcijaTotal[sek].rsd)}</td>
-      </tr>\`
+      tabelaRows += '<tr style="background:#1a2235;font-weight:700">\n        <td style="color:'
+    + sekcijaColors[sek]
+    + '">Total '
+    + sek
+    + '</td>\n        '
+    + (totM||[]).map((v) => '<td style="color:'+sekcijaColors[sek]+';text-align:right;font-weight:700">'+(v>0?fmt(v,0):'—')+'</td>').join('')
+    + '<td style="color:'
+    + sekcijaColors[sek]
+    + ';text-align:right">'
+    + fmtEur(sekcijaTotal[sek].eur)
+    + '</td>\n        <td style="color:'
+    + sekcijaColors[sek]
+    + ';text-align:right">'
+    + fmtRsd(sekcijaTotal[sek].rsd)
+    + '</td>\n      </tr>'
     }
 
     // Total svi
-    tabelaRows += \`<tr style="background:#0f172a;border-top:2px solid #334155;font-weight:700">
-      <td style="color:#f87171">UKUPNO RASHODI</td>
-      \${(ts.meseci||[]).map((v) => '<td style="color:#f87171;text-align:right;font-weight:700">'+(v>0?fmt(v,0):'—')+'</td>').join('')}
-      <td style="color:#f87171;text-align:right">\${fmtEur(ts.eur)}</td>
-      <td style="color:#f87171;text-align:right">\${fmtRsd(ts.rsd)}</td>
-    </tr>\`
+    tabelaRows += '<tr style="background:#0f172a;border-top:2px solid #334155;font-weight:700">\n      <td style="color:#f87171">UKUPNO RASHODI</td>\n      '
+    + (ts.meseci||[]).map((v) => '<td style="color:#f87171;text-align:right;font-weight:700">'+(v>0?fmt(v,0):'—')+'</td>').join('')
+    + '<td style="color:#f87171;text-align:right">'
+    + fmtEur(ts.eur)
+    + '</td>\n      <td style="color:#f87171;text-align:right">'
+    + fmtRsd(ts.rsd)
+    + '</td>\n    </tr>'
 
-    content.innerHTML = kpiHtml + \`
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-bar mr-2" style="color:#ef4444"></i>Rashodi po kategoriji (EUR)</div>
-          <div class="chart-container" style="height:280px"><canvas id="chart-troskovi-cat"></canvas></div>
-        </div>
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-area mr-2" style="color:#f59e0b"></i>Trend rashoda po mesecima (RSD)</div>
-          <div class="chart-container" style="height:280px"><canvas id="chart-troskovi-trend"></canvas></div>
-        </div>
-      </div>
-      <div class="card" style="margin-bottom:16px">
-        <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-table mr-2" style="color:#f87171"></i>Troškovi po kategorijama × mesecima (RSD)</div>
-        <div style="font-size:12px;color:#475569;margin-bottom:12px">Sve vrednosti u RSD. Kurs za EUR konverziju: <strong style="color:#f59e0b">1 EUR ≈ \${fmt(kurs,2)} RSD</strong></div>
-        <div style="overflow:auto;max-height:580px">
-          <table style="min-width:900px"><thead><tr>
-            <th style="min-width:160px">Kategorija</th>
-            \${MESECI_IME.map(m=>'<th style="text-align:right;min-width:70px">'+m+'</th>').join('')}
-            <th style="text-align:right;min-width:90px;color:#a78bfa">Ukupno EUR</th>
-            <th style="text-align:right;min-width:110px">Ukupno RSD</th>
-          </tr></thead><tbody>
-          \${tabelaRows}
-          </tbody></table>
-        </div>
-      </div>
-    \`
+    content.innerHTML = kpiHtml + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px"> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-bar mr-2" style="color:#ef4444"></i>Rashodi po kategoriji (EUR)</div> <div class="chart-container" style="height:280px"><canvas id="chart-troskovi-cat"></canvas></div> </div> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-area mr-2" style="color:#f59e0b"></i>Trend rashoda po mesecima (RSD)</div> <div class="chart-container" style="height:280px"><canvas id="chart-troskovi-trend"></canvas></div> </div> </div> <div class="card" style="margin-bottom:16px"> <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-table mr-2" style="color:#f87171"></i>Troškovi po kategorijama × mesecima (RSD)</div> <div style="font-size:12px;color:#475569;margin-bottom:12px">Sve vrednosti u RSD. Kurs za EUR konverziju: <strong style="color:#f59e0b">1 EUR ≈'
+    + fmt(kurs,2)
+    + ' RSD</strong></div>\n        <div style="overflow:auto;max-height:580px">\n          <table style="min-width:900px"><thead><tr>\n            <th style="min-width:160px">Kategorija</th>\n            '
+    + MESECI_IME.map(m=>'<th style="text-align:right;min-width:70px">'+m+'</th>').join('')
+    + '<th style="text-align:right;min-width:90px;color:#a78bfa">Ukupno EUR</th> <th style="text-align:right;min-width:110px">Ukupno RSD</th> </tr></thead><tbody>'
+    + tabelaRows
+    + '</tbody></table> </div> </div>'
 
     // Doughnut — raspodela po sekcijama
     const sekData = sekcije.map(s => {
@@ -2507,7 +2340,7 @@ async function finTab(tab, btn) {
     try {
       data = (await axios.get('/api/pl')).data
     } catch(e) {
-      content.innerHTML = \`<div class="card" style="color:#ef4444;padding:32px;text-align:center"><i class="fas fa-exclamation-triangle mr-2"></i>Greška pri učitavanju P&L podataka.</div>\`
+      content.innerHTML = '<div class="card" style="color:#ef4444;padding:32px;text-align:center"><i class="fas fa-exclamation-triangle mr-2"></i>Greška pri učitavanju P&L podataka.</div>'
       return
     }
 
@@ -2522,106 +2355,93 @@ async function finTab(tab, btn) {
     const ytdNetoPct = ytd.prihod > 0 ? (ytd.neto / ytd.prihod * 100).toFixed(1) : '—'
     const ytdNetoColor = ytd.neto > 0 ? '#10b981' : '#ef4444'
 
-    const kpiHtml = \`
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px;margin-bottom:20px">
-        <div class="kpi-card kpi-green">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-euro-sign mr-1"></i>YTD Prihod (bez PDV)</div>
-          <div style="font-size:22px;font-weight:700;color:#10b981">\${fmtEur(ytd.prihod)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">Naša marža × 0.80</div>
-        </div>
-        <div class="kpi-card kpi-green">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-chart-pie mr-1"></i>YTD Naša marža</div>
-          <div style="font-size:22px;font-weight:700;color:#6ee7b7">\${fmtEur(ytd.nasaMarza)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">pre odbitka PDV</div>
-        </div>
-        <div class="kpi-card kpi-red">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-money-bill-wave mr-1"></i>YTD Rashodi (EUR)</div>
-          <div style="font-size:22px;font-weight:700;color:#f87171">\${sheetsOk?fmtEur(ytd.rashodiEur):'N/A'}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">\${sheetsOk?fmtRsd(ytd.rashodiRsd):'Sheets nisu konfigurisani'}</div>
-        </div>
-        <div class="kpi-card" style="background:linear-gradient(135deg,\${ytd.neto>0?'#052e16':'#450a0a'},#0f172a);border:2px solid \${ytd.neto>0?'#166534':'#7f1d1d'};border-radius:12px;padding:20px">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-balance-scale mr-1" style="color:\${ytdNetoColor}"></i>YTD NETO REZULTAT</div>
-          <div style="font-size:24px;font-weight:700;color:\${ytdNetoColor}">\${sheetsOk?fmtEur(ytd.neto):'N/A'}</div>
-          <div style="font-size:12px;color:#475569;margin-top:4px">\${sheetsOk?ytdNetoPct+'% neto marže':'—'}</div>
-        </div>
-        <div class="kpi-card kpi-blue">
-          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-exchange-alt mr-1"></i>Kurs EUR/RSD</div>
-          <div style="font-size:22px;font-weight:700;color:#3b82f6">\${fmt(kurs,2)}</div>
-          <div style="font-size:11px;color:#475569;margin-top:4px">iz Sheets tabele</div>
-        </div>
-      </div>
-    \`
+    const kpiHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:12px;margin-bottom:20px"> <div class="kpi-card kpi-green"> <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-euro-sign mr-1"></i>YTD Prihod (bez PDV)</div> <div style="font-size:22px;font-weight:700;color:#10b981">'
+    + fmtEur(ytd.prihod)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">Naša marža × 0.80</div>\n        </div>\n        <div class="kpi-card kpi-green">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-chart-pie mr-1"></i>YTD Naša marža</div>\n          <div style="font-size:22px;font-weight:700;color:#6ee7b7">'
+    + fmtEur(ytd.nasaMarza)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">pre odbitka PDV</div>\n        </div>\n        <div class="kpi-card kpi-red">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-money-bill-wave mr-1"></i>YTD Rashodi (EUR)</div>\n          <div style="font-size:22px;font-weight:700;color:#f87171">'
+    + sheetsOk?fmtEur(ytd.rashodiEur):'N/A'
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">'
+    + sheetsOk?fmtRsd(ytd.rashodiRsd):'Sheets nisu konfigurisani'
+    + '</div>\n        </div>\n        <div class="kpi-card" style="background:linear-gradient(135deg,'
+    + ytd.neto>0?'#052e16':'#450a0a'
+    + ',#0f172a);border:2px solid '
+    + ytd.neto>0?'#166534':'#7f1d1d'
+    + ';border-radius:12px;padding:20px">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-balance-scale mr-1" style="color:'
+    + ytdNetoColor
+    + '"></i>YTD NETO REZULTAT</div>\n          <div style="font-size:24px;font-weight:700;color:'
+    + ytdNetoColor
+    + '">'
+    + sheetsOk?fmtEur(ytd.neto):'N/A'
+    + '</div>\n          <div style="font-size:12px;color:#475569;margin-top:4px">'
+    + sheetsOk?ytdNetoPct+'% neto marže':'—'
+    + '</div>\n        </div>\n        <div class="kpi-card kpi-blue">\n          <div style="font-size:11px;color:#64748b;text-transform:uppercase;margin-bottom:8px"><i class="fas fa-exchange-alt mr-1"></i>Kurs EUR/RSD</div>\n          <div style="font-size:22px;font-weight:700;color:#3b82f6">'
+    + fmt(kurs,2)
+    + '</div>\n          <div style="font-size:11px;color:#475569;margin-top:4px">iz Sheets tabele</div>\n        </div>\n      </div>\n    '
 
     // P&L tabela
     let plRows = ''
     for (const r of aktivni) {
       const netoColor = r.neto > 0 ? '#10b981' : '#ef4444'
       const netoIcon = r.neto > 0 ? '▲' : '▼'
-      plRows += \`<tr>
-        <td style="font-weight:600;color:#f1f5f9">\${r.mesec} <span style="color:#475569;font-size:11px">\${r.mesecIme}</span></td>
-        <td style="color:#6ee7b7;font-weight:600">\${fmtEur(r.nasaMarza)}</td>
-        <td style="color:#10b981;font-weight:700">\${fmtEur(r.prihod)}</td>
-        <td style="color:#f87171">\${sheetsOk?fmtRsd(r.plateRsd):'—'}</td>
-        <td style="color:#fbbf24">\${sheetsOk?fmtRsd(r.operativaRsd):'—'}</td>
-        <td style="color:#a78bfa">\${sheetsOk?fmtRsd(r.razvojRsd):'—'}</td>
-        <td style="color:#f87171;font-weight:600">\${sheetsOk?fmtEur(r.ukupnoRashodiEur):'—'}</td>
-        <td style="color:\${netoColor};font-weight:700">\${sheetsOk?netoIcon+' '+fmtEur(r.neto):'—'}</td>
-        <td style="color:\${netoColor};font-size:12px">\${sheetsOk&&r.prihod>0?(r.netoPct>0?'+':'')+r.netoPct.toFixed(1)+'%':'—'}</td>
-        <td style="color:#64748b">\${fmtInt(r.rezervacije)}</td>
-      </tr>\`
+      plRows += '<tr>\n        <td style="font-weight:600;color:#f1f5f9">'
+    + r.mesec
+    + ' <span style="color:#475569;font-size:11px">'
+    + r.mesecIme
+    + '</span></td>\n        <td style="color:#6ee7b7;font-weight:600">'
+    + fmtEur(r.nasaMarza)
+    + '</td>\n        <td style="color:#10b981;font-weight:700">'
+    + fmtEur(r.prihod)
+    + '</td>\n        <td style="color:#f87171">'
+    + sheetsOk?fmtRsd(r.plateRsd):'—'
+    + '</td>\n        <td style="color:#fbbf24">'
+    + sheetsOk?fmtRsd(r.operativaRsd):'—'
+    + '</td>\n        <td style="color:#a78bfa">'
+    + sheetsOk?fmtRsd(r.razvojRsd):'—'
+    + '</td>\n        <td style="color:#f87171;font-weight:600">'
+    + sheetsOk?fmtEur(r.ukupnoRashodiEur):'—'
+    + '</td>\n        <td style="color:'
+    + netoColor
+    + ';font-weight:700">'
+    + sheetsOk?netoIcon+' '+fmtEur(r.neto):'—'
+    + '</td>\n        <td style="color:'
+    + netoColor
+    + ';font-size:12px">'
+    + sheetsOk&&r.prihod>0?(r.netoPct>0?'+':'')+r.netoPct.toFixed(1)+'%':'—'
+    + '</td>\n        <td style="color:#64748b">'
+    + fmtInt(r.rezervacije)
+    + '</td>\n      </tr>'
     }
 
     const ytdNetoRowColor = ytd.neto > 0 ? '#10b981' : '#ef4444'
-    plRows += \`<tr style="background:#0f172a;font-weight:700;border-top:2px solid #334155">
-      <td style="color:#f1f5f9">YTD UKUPNO</td>
-      <td style="color:#6ee7b7">\${fmtEur(ytd.nasaMarza)}</td>
-      <td style="color:#10b981">\${fmtEur(ytd.prihod)}</td>
-      <td style="color:#f87171" colspan="3">\${sheetsOk?fmtRsd(ytd.rashodiRsd):'—'}</td>
-      <td style="color:#f87171">\${sheetsOk?fmtEur(ytd.rashodiEur):'—'}</td>
-      <td style="color:\${ytdNetoRowColor}">\${sheetsOk?fmtEur(ytd.neto):'—'}</td>
-      <td style="color:\${ytdNetoRowColor}">\${sheetsOk&&ytd.prihod>0?ytdNetoPct+'%':'—'}</td>
-      <td style="color:#64748b">\${fmtInt(ytd.rezervacije)}</td>
-    </tr>\`
+    plRows += '<tr style="background:#0f172a;font-weight:700;border-top:2px solid #334155">\n      <td style="color:#f1f5f9">YTD UKUPNO</td>\n      <td style="color:#6ee7b7">'
+    + fmtEur(ytd.nasaMarza)
+    + '</td>\n      <td style="color:#10b981">'
+    + fmtEur(ytd.prihod)
+    + '</td>\n      <td style="color:#f87171" colspan="3">'
+    + sheetsOk?fmtRsd(ytd.rashodiRsd):'—'
+    + '</td>\n      <td style="color:#f87171">'
+    + sheetsOk?fmtEur(ytd.rashodiEur):'—'
+    + '</td>\n      <td style="color:'
+    + ytdNetoRowColor
+    + '">'
+    + sheetsOk?fmtEur(ytd.neto):'—'
+    + '</td>\n      <td style="color:'
+    + ytdNetoRowColor
+    + '">'
+    + sheetsOk&&ytd.prihod>0?ytdNetoPct+'%':'—'
+    + '</td>\n      <td style="color:#64748b">'
+    + fmtInt(ytd.rezervacije)
+    + '</td>\n    </tr>'
 
     const sheetsWarn = sheetsOk ? '' : '<div style="margin-bottom:16px;padding:12px 16px;background:#451a03;border:1px solid #92400e;border-radius:10px;color:#fbbf24;font-size:13px"><i class="fas fa-exclamation-triangle mr-2"></i>Google Sheets nije dostupan \u2014 rashodi prikazani kao 0. Podesite SHEETS_PRIVATE_KEY, SHEETS_CLIENT_EMAIL i SHEETS_SPREADSHEET_ID secrets.</div>'
-    content.innerHTML = kpiHtml + \`
-      \${sheetsWarn}
-      <div class="card" style="margin-bottom:16px">
-        <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-line mr-2" style="color:#10b981"></i>P&L trend 2026 — Prihod vs Rashodi vs Neto</div>
-        <div style="font-size:12px;color:#475569;margin-bottom:14px">Prihod = Naša marža bez PDV (MySQL real-time). Rashodi = Plate + Operativni + Razvoj (Sheets "2026", konvertovano po kursu \${fmt(kurs,0)} RSD/EUR).</div>
-        <div class="chart-container" style="height:320px"><canvas id="chart-pl-trend"></canvas></div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-layer-group mr-2" style="color:#f87171"></i>Struktura rashoda po mesecima (RSD)</div>
-          <div class="chart-container" style="height:260px"><canvas id="chart-pl-rashodi"></canvas></div>
-        </div>
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-bar mr-2" style="color:#10b981"></i>Neto rezultat po mesecima (EUR)</div>
-          <div class="chart-container" style="height:260px"><canvas id="chart-pl-neto"></canvas></div>
-        </div>
-      </div>
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-table mr-2" style="color:#3b82f6"></i>Mesečni P&L izveštaj 2026</div>
-        <div style="font-size:12px;color:#475569;margin-bottom:12px">Prihod = Naša marža × 0.80 (bez PDV). Rashodi konvertovani iz RSD po kursu iz Sheets tabele.</div>
-        <div style="overflow:auto">
-          <table><thead><tr>
-            <th>Mesec</th>
-            <th style="color:#6ee7b7">Naša marža</th>
-            <th style="color:#10b981">Prihod (bez PDV)</th>
-            <th style="color:#f87171">Plate (RSD)</th>
-            <th style="color:#fbbf24">Operativni (RSD)</th>
-            <th style="color:#a78bfa">Razvoj (RSD)</th>
-            <th style="color:#f87171">Rashodi (EUR)</th>
-            <th style="color:#34d399">Neto (EUR)</th>
-            <th>Neto %</th>
-            <th>Rez.</th>
-          </tr></thead><tbody>
-          \${plRows}
-          </tbody></table>
-        </div>
-      </div>
-    \`
+    content.innerHTML = kpiHtml + ''
+    + sheetsWarn
+    + '<div class="card" style="margin-bottom:16px"> <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-line mr-2" style="color:#10b981"></i>P&L trend 2026 — Prihod vs Rashodi vs Neto</div> <div style="font-size:12px;color:#475569;margin-bottom:14px">Prihod = Naša marža bez PDV (MySQL real-time). Rashodi = Plate + Operativni + Razvoj (Sheets "2026", konvertovano po kursu'
+    + fmt(kurs,0)
+    + ' RSD/EUR).</div>\n        <div class="chart-container" style="height:320px"><canvas id="chart-pl-trend"></canvas></div>\n      </div>\n      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">\n        <div class="card">\n          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-layer-group mr-2" style="color:#f87171"></i>Struktura rashoda po mesecima (RSD)</div>\n          <div class="chart-container" style="height:260px"><canvas id="chart-pl-rashodi"></canvas></div>\n        </div>\n        <div class="card">\n          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-bar mr-2" style="color:#10b981"></i>Neto rezultat po mesecima (EUR)</div>\n          <div class="chart-container" style="height:260px"><canvas id="chart-pl-neto"></canvas></div>\n        </div>\n      </div>\n      <div class="card">\n        <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-table mr-2" style="color:#3b82f6"></i>Mesečni P&L izveštaj 2026</div>\n        <div style="font-size:12px;color:#475569;margin-bottom:12px">Prihod = Naša marža × 0.80 (bez PDV). Rashodi konvertovani iz RSD po kursu iz Sheets tabele.</div>\n        <div style="overflow:auto">\n          <table><thead><tr>\n            <th>Mesec</th>\n            <th style="color:#6ee7b7">Naša marža</th>\n            <th style="color:#10b981">Prihod (bez PDV)</th>\n            <th style="color:#f87171">Plate (RSD)</th>\n            <th style="color:#fbbf24">Operativni (RSD)</th>\n            <th style="color:#a78bfa">Razvoj (RSD)</th>\n            <th style="color:#f87171">Rashodi (EUR)</th>\n            <th style="color:#34d399">Neto (EUR)</th>\n            <th>Neto %</th>\n            <th>Rez.</th>\n          </tr></thead><tbody>\n          '
+    + plRows
+    + '</tbody></table> </div> </div>'
 
     // Chart: Prihod vs Rashodi vs Neto (line)
     makeChart('chart-pl-trend','line',{
@@ -2675,22 +2495,7 @@ async function rezTab(tab, btn) {
   if (tab === 'trend') {
     const d = window.rezData
     const trend = d.trend || []
-    content.innerHTML = \`
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Broj rezervacija po mesecima</div>
-          <div class="chart-container" style="height:260px"><canvas id="chart-rez-trend"></canvas></div>
-        </div>
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Prihod po mesecima (EUR)</div>
-          <div class="chart-container" style="height:260px"><canvas id="chart-rez-prihod"></canvas></div>
-        </div>
-      </div>
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:12px;font-size:14px;color:#f1f5f9">Načini plaćanja</div>
-        <div id="nacin-tabela"></div>
-      </div>
-    \`
+    content.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px"> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Broj rezervacija po mesecima</div> <div class="chart-container" style="height:260px"><canvas id="chart-rez-trend"></canvas></div> </div> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Prihod po mesecima (EUR)</div> <div class="chart-container" style="height:260px"><canvas id="chart-rez-prihod"></canvas></div> </div> </div> <div class="card"> <div style="font-weight:600;margin-bottom:12px;font-size:14px;color:#f1f5f9">Načini plaćanja</div> <div id="nacin-tabela"></div> </div>'
     makeChart('chart-rez-trend','bar',{
       labels:trend.map(r=>r.mesec),
       datasets:[
@@ -2704,11 +2509,9 @@ async function rezTab(tab, btn) {
       datasets:[{label:'Prihod (EUR)',data:trend.map(r=>r.prihod),borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.1)',fill:true,tension:.4}]
     })
     const nacin = d.nacin_placanja || []
-    document.getElementById('nacin-tabela').innerHTML = \`
-      <table><thead><tr><th>Način plaćanja</th><th>Broj</th><th>Vrednost (EUR)</th></tr></thead>
-      <tbody>\${nacin.map(r=>'<tr><td>'+r.nacin+'</td><td>'+fmtInt(r.cnt)+'</td><td style="color:#3b82f6">'+fmtEur(r.vrednost)+'</td></tr>').join('')}
-      </tbody></table>
-    \`
+    document.getElementById('nacin-tabela').innerHTML = '<table><thead><tr><th>Način plaćanja</th><th>Broj</th><th>Vrednost (EUR)</th></tr></thead> <tbody>'
+    + nacin.map(r=>'<tr><td>'+r.nacin+'</td><td>'+fmtInt(r.cnt)+'</td><td style="color:#3b82f6">'+fmtEur(r.vrednost)+'</td></tr>').join('')
+    + '</tbody></table>'
   }
 
   else if (tab === 'statusi') {
@@ -2724,9 +2527,8 @@ async function rezTab(tab, btn) {
       cancelled_penalty: '#dc2626', overpayment: '#3b82f6'
     }
 
-    content.innerHTML = \`
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:16px">
-        \${statusi.map(r=>{
+    content.innerHTML = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:16px">'
+    + statusi.map(r=>{
           const col = STATUS_COLORS[r.status]||'#64748b'
           const pct = ukupnoRez>0?(parseInt(r.cnt)/ukupnoRez*100).toFixed(1):0
           return '<div onclick="loadStatusTable(&#39;'+r.status+'&#39;,this)"'
@@ -2740,73 +2542,7 @@ async function rezTab(tab, btn) {
             +'</div>'
             +'<div style="font-size:10px;color:#475569;margin-top:3px">'+pct+'% rezervacija</div>'
             +'</div>'
-        }).join('')}
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Broj rezervacija po statusu</div>
-          <div class="chart-container" style="height:240px"><canvas id="chart-rez-status"></canvas></div>
-        </div>
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Vrednost po statusu (EUR)</div>
-          <div class="chart-container" style="height:240px"><canvas id="chart-rez-status-vred"></canvas></div>
-        </div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Platni status — broj</div>
-          <div class="chart-container" style="height:220px"><canvas id="chart-rez-pay"></canvas></div>
-        </div>
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Platni status — vrednost (EUR)</div>
-          <div class="chart-container" style="height:220px"><canvas id="chart-rez-pay-vred"></canvas></div>
-        </div>
-      </div>
-
-      <div class="card" id="status-table-card" style="display:none">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-          <div>
-            <div style="font-weight:600;font-size:14px;color:#f1f5f9" id="status-table-title">Rezervacije</div>
-            <div style="font-size:12px;color:#64748b;margin-top:2px" id="status-table-sub"></div>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input type="text" id="status-search" placeholder="Pretraži..." oninput="filterTable(this,'status-tbody')"
-              style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:6px 12px;font-size:13px;outline:none;width:200px">
-            <button class="btn btn-ghost" onclick="closeStatusTable()" style="font-size:12px">
-              <i class="fas fa-times"></i> Zatvori
-            </button>
-          </div>
-        </div>
-        <div style="overflow:auto;max-height:480px">
-          <table><thead><tr>
-            <th>Reference</th>
-            <th>Agencija</th>
-            <th>Hotel</th>
-            <th>Check-in</th>
-            <th>Noć.</th>
-            <th>Cena (EUR)</th>
-            <th>Net (EUR)</th>
-            <th>Platni status</th>
-            <th>Način plaćanja</th>
-            <th>Datum</th>
-          </tr></thead>
-          <tbody id="status-tbody"></tbody></table>
-        </div>
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;flex-wrap:wrap;gap:8px">
-          <div id="status-pagination-info" style="font-size:12px;color:#64748b"></div>
-          <div style="display:flex;gap:6px">
-            <button class="btn btn-ghost" id="btn-prev-page" onclick="statusPage(-1)" style="font-size:12px">
-              <i class="fas fa-chevron-left"></i> Prethodna
-            </button>
-            <button class="btn btn-ghost" id="btn-next-page" onclick="statusPage(1)" style="font-size:12px">
-              Sledeća <i class="fas fa-chevron-right"></i>
-            </button>
-          </div>
-        </div>
-      </div>
-    \`
+    + ').join(\'\')}\n      </div>\n\n      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">\n        <div class="card">\n          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Broj rezervacija po statusu</div>\n          <div class="chart-container" style="height:240px"><canvas id="chart-rez-status"></canvas></div>\n        </div>\n        <div class="card">\n          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Vrednost po statusu (EUR)</div>\n          <div class="chart-container" style="height:240px"><canvas id="chart-rez-status-vred"></canvas></div>\n        </div>\n      </div>\n\n      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">\n        <div class="card">\n          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Platni status — broj</div>\n          <div class="chart-container" style="height:220px"><canvas id="chart-rez-pay"></canvas></div>\n        </div>\n        <div class="card">\n          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Platni status — vrednost (EUR)</div>\n          <div class="chart-container" style="height:220px"><canvas id="chart-rez-pay-vred"></canvas></div>\n        </div>\n      </div>\n\n      <div class="card" id="status-table-card" style="display:none">\n        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">\n          <div>\n            <div style="font-weight:600;font-size:14px;color:#f1f5f9" id="status-table-title">Rezervacije</div>\n            <div style="font-size:12px;color:#64748b;margin-top:2px" id="status-table-sub"></div>\n          </div>\n          <div style="display:flex;gap:8px;align-items:center">\n            <input type="text" id="status-search" placeholder="Pretraži..." oninput="filterTable(this,\'status-tbody\')"\n              style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:6px 12px;font-size:13px;outline:none;width:200px">\n            <button class="btn btn-ghost" onclick="closeStatusTable()" style="font-size:12px">\n              <i class="fas fa-times"></i> Zatvori\n            </button>\n          </div>\n        </div>\n        <div style="overflow:auto;max-height:480px">\n          <table><thead><tr>\n            <th>Reference</th>\n            <th>Agencija</th>\n            <th>Hotel</th>\n            <th>Check-in</th>\n            <th>Noć.</th>\n            <th>Cena (EUR)</th>\n            <th>Net (EUR)</th>\n            <th>Platni status</th>\n            <th>Način plaćanja</th>\n            <th>Datum</th>\n          </tr></thead>\n          <tbody id="status-tbody"></tbody></table>\n        </div>\n        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;flex-wrap:wrap;gap:8px">\n          <div id="status-pagination-info" style="font-size:12px;color:#64748b"></div>\n          <div style="display:flex;gap:6px">\n            <button class="btn btn-ghost" id="btn-prev-page" onclick="statusPage(-1)" style="font-size:12px">\n              <i class="fas fa-chevron-left"></i> Prethodna\n            </button>\n            <button class="btn btn-ghost" id="btn-next-page" onclick="statusPage(1)" style="font-size:12px">\n              Sledeća <i class="fas fa-chevron-right"></i>\n            </button>\n          </div>\n        </div>\n      </div>\n    '
 
     makeChart('chart-rez-status','doughnut',{
       labels:statusi.map(r=>STATUS_LABELS[r.status]||r.status),
@@ -2833,12 +2569,7 @@ async function rezTab(tab, btn) {
   else if (tab === 'nocenja') {
     const d = window.rezData
     const nocenja = d.nocenja || []
-    content.innerHTML = \`
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Distribucija broja noćenja</div>
-        <div class="chart-container" style="height:300px"><canvas id="chart-rez-nocenja"></canvas></div>
-      </div>
-    \`
+    content.innerHTML = '<div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Distribucija broja noćenja</div> <div class="chart-container" style="height:300px"><canvas id="chart-rez-nocenja"></canvas></div> </div>'
     makeChart('chart-rez-nocenja','bar',{
       labels:nocenja.map(r=>r.nights+' noć.'),
       datasets:[
@@ -2853,19 +2584,11 @@ async function rezTab(tab, btn) {
   }
 
   else if (tab === 'otkazivanja') {
-    const rows = (await axios.get(\`/api/rezervacije/otkazivanja?\${dateParams()}\`)).data
-    content.innerHTML = \`
-      <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-          <div style="font-weight:600;font-size:14px;color:#f1f5f9"><i class="fas fa-ban mr-2" style="color:#ef4444"></i>Otkazivanja rezervacija</div>
-          <span class="badge badge-red">\${rows.length} otkazivanja</span>
-        </div>
-        <div style="overflow:auto;max-height:500px">
-          <table><thead><tr>
-            <th>Datum</th><th>Rezervacija</th><th>Agencija</th><th>Hotel</th><th>Check-in</th>
-            <th>Ukupan trošak</th><th>Provajder</th><th>Agencija</th><th>Refund</th><th>Isplaćeno</th>
-          </tr></thead><tbody>
-          \${rows.map(r=>'<tr>'
+    const rows = (await axios.get('/api/rezervacije/otkazivanja?' + dateParams())).data
+    content.innerHTML = '<div class="card"> <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px"> <div style="font-weight:600;font-size:14px;color:#f1f5f9"><i class="fas fa-ban mr-2" style="color:#ef4444"></i>Otkazivanja rezervacija</div> <span class="badge badge-red">'
+    + rows.length
+    + ' otkazivanja</span>\n        </div>\n        <div style="overflow:auto;max-height:500px">\n          <table><thead><tr>\n            <th>Datum</th><th>Rezervacija</th><th>Agencija</th><th>Hotel</th><th>Check-in</th>\n            <th>Ukupan trošak</th><th>Provajder</th><th>Agencija</th><th>Refund</th><th>Isplaćeno</th>\n          </tr></thead><tbody>\n          '
+    + rows.map(r=>'<tr>'
             +'<td>'+(r.cancelled_at?.split('T')[0]||'—')+'</td>'
             +'<td><code style="font-size:11px;color:#60a5fa">'+r.reference+'</code></td>'
             +'<td style="font-size:12px">'+(r.agencija||'—')+'</td>'
@@ -2876,21 +2599,13 @@ async function rezTab(tab, btn) {
             +'<td style="color:#8b5cf6">'+fmtEur(r.agency_amount)+'</td>'
             +'<td style="color:#10b981">'+fmtEur(r.refund_amount)+'</td>'
             +'<td>'+(r.paid_out?'<span class="badge badge-green">Da</span>':'<span class="badge badge-red">Ne</span>')+'</td>'
-            +'</tr>').join('')}
-          </tbody></table>
-        </div>
-      </div>
-    \`
+            +'</tr>').join('')
+    + '</tbody></table> </div> </div>'
   }
 
   else if (tab === 'checkin') {
-    const rows = (await axios.get(\`/api/rezervacije/checkin-kalendar?\${dateParams()}\`)).data
-    content.innerHTML = \`
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Dolasci (Check-in) po mesecima</div>
-        <div class="chart-container" style="height:300px"><canvas id="chart-rez-checkin"></canvas></div>
-      </div>
-    \`
+    const rows = (await axios.get('/api/rezervacije/checkin-kalendar?' + dateParams())).data
+    content.innerHTML = '<div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Dolasci (Check-in) po mesecima</div> <div class="chart-container" style="height:300px"><canvas id="chart-rez-checkin"></canvas></div> </div>'
     makeChart('chart-rez-checkin','bar',{
       labels:rows.map(r=>r.mesec),
       datasets:[
@@ -2924,23 +2639,7 @@ function agtTab(tab, btn) {
 
   else if (tab === 'grafikon') {
     const top15 = (d.rang||[]).slice(0,15)
-    content.innerHTML = \`
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Top 15 agencija — Prihod (EUR)</div>
-          <div class="chart-container" style="height:420px"><canvas id="chart-agt-prihod"></canvas></div>
-        </div>
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Top 15 agencija — Rezervacije</div>
-          <div class="chart-container" style="height:420px"><canvas id="chart-agt-rez"></canvas></div>
-        </div>
-      </div>
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-layer-group mr-2" style="color:#10b981"></i>Naša marža vs Komisije agencijama — Top 15</div>
-        <div style="font-size:12px;color:#475569;margin-bottom:14px">Stacked bar: zeleno = naša marža, žuto = komisije agencijama</div>
-        <div class="chart-container" style="height:380px"><canvas id="chart-agt-marza-stack"></canvas></div>
-      </div>
-    \`
+    content.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px"> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Top 15 agencija — Prihod (EUR)</div> <div class="chart-container" style="height:420px"><canvas id="chart-agt-prihod"></canvas></div> </div> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Top 15 agencija — Rezervacije</div> <div class="chart-container" style="height:420px"><canvas id="chart-agt-rez"></canvas></div> </div> </div> <div class="card"> <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-layer-group mr-2" style="color:#10b981"></i>Naša marža vs Komisije agencijama — Top 15</div> <div style="font-size:12px;color:#475569;margin-bottom:14px">Stacked bar: zeleno = naša marža, žuto = komisije agencijama</div> <div class="chart-container" style="height:380px"><canvas id="chart-agt-marza-stack"></canvas></div> </div>'
     const labels15 = top15.map(r=>r.name.length>22?r.name.substring(0,22)+'…':r.name)
     makeChart('chart-agt-prihod','bar',{
       labels:labels15,
@@ -2964,23 +2663,8 @@ function agtTab(tab, btn) {
 
   else if (tab === 'tabela') {
     const lista = d.lista || []
-    content.innerHTML = \`
-      <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px">
-          <div style="font-weight:600;font-size:14px;color:#f1f5f9">Sve agencije</div>
-          <input type="text" id="agt-search" placeholder="Pretraži agencije..." oninput="filterTable(this,'agt-tbody')"
-            style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:6px 12px;font-size:13px;outline:none;width:220px">
-        </div>
-        <div style="overflow:auto;max-height:500px">
-          <table><thead><tr>
-            <th>Agencija</th><th>Status</th><th>Rez.</th>
-            <th>Prihvaćene</th><th>Ukupan prihod</th>
-            <th>Gross marža</th><th style="color:#fcd34d">Komisija agt.</th>
-            <th style="color:#6ee7b7">Naša marža</th>
-            <th style="color:#34d399">Bez PDV</th>
-            <th>Prosečna vred.</th><th>Poslednja rez.</th>
-          </tr></thead><tbody id="agt-tbody">
-          \${lista.map(u=>{
+    content.innerHTML = '<div class="card"> <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px"> <div style="font-weight:600;font-size:14px;color:#f1f5f9">Sve agencije</div> <input type="text" id="agt-search" placeholder="Pretraži agencije..." oninput="filterTable(this,\'agt-tbody\')" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:6px 12px;font-size:13px;outline:none;width:220px"> </div> <div style="overflow:auto;max-height:500px"> <table><thead><tr> <th>Agencija</th><th>Status</th><th>Rez.</th> <th>Prihvaćene</th><th>Ukupan prihod</th> <th>Gross marža</th><th style="color:#fcd34d">Komisija agt.</th> <th style="color:#6ee7b7">Naša marža</th> <th style="color:#34d399">Bez PDV</th> <th>Prosečna vred.</th><th>Poslednja rez.</th> </tr></thead><tbody id="agt-tbody">'
+    + lista.map(u=>{
             const nm = parseFloat(u.nasa_marza||0)
             return '<tr>'
             +'<td style="font-weight:600">'+u.name+'</td>'
@@ -2994,11 +2678,8 @@ function agtTab(tab, btn) {
             +'<td style="color:#34d399;font-weight:700">'+fmtEur(nm * 0.80)+'</td>'
             +'<td style="color:#64748b">'+fmtEur(u.prosecna_vrednost)+'</td>'
             +'<td style="font-size:12px;color:#64748b">'+(u.poslednja_rezervacija?.split('T')[0]||'—')+'</td>'
-            +'</tr>'}).join('')}
-          </tbody></table>
-        </div>
-      </div>
-    \`
+            +'</tr>'
+    + ').join(\'\')}\n          </tbody></table>\n        </div>\n      </div>\n    '
   }
 }
 
@@ -3015,24 +2696,8 @@ async function prvTab(tab, btn) {
   if (tab === 'pregled') {
     const lista = d.lista || []
     const topPrv = lista.filter(p=>p.prihod_eur>0).slice(0,10)
-    content.innerHTML = \`
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Top provajderi — Prihod (EUR)</div>
-          <div class="chart-container" style="height:300px"><canvas id="chart-prv-bar"></canvas></div>
-        </div>
-        <div class="card">
-          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Udeo u rezervacijama</div>
-          <div class="chart-container" style="height:300px"><canvas id="chart-prv-pie"></canvas></div>
-        </div>
-      </div>
-      <div class="card">
-        <div style="overflow:auto;max-height:400px">
-          <table><thead><tr>
-            <th>Provajder</th><th>Status</th><th>Markup %</th><th>Rezervacije</th>
-            <th>Prihod (EUR)</th><th>Net (EUR)</th><th>Marža (EUR)</th>
-          </tr></thead><tbody>
-          \${lista.map(p=>'<tr>'
+    content.innerHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px"> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Top provajderi — Prihod (EUR)</div> <div class="chart-container" style="height:300px"><canvas id="chart-prv-bar"></canvas></div> </div> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Udeo u rezervacijama</div> <div class="chart-container" style="height:300px"><canvas id="chart-prv-pie"></canvas></div> </div> </div> <div class="card"> <div style="overflow:auto;max-height:400px"> <table><thead><tr> <th>Provajder</th><th>Status</th><th>Markup %</th><th>Rezervacije</th> <th>Prihod (EUR)</th><th>Net (EUR)</th><th>Marža (EUR)</th> </tr></thead><tbody>'
+    + lista.map(p=>'<tr>'
             +'<td style="font-weight:600">'+p.name+'</td>'
             +'<td>'+(p.enabled?'<span class="badge badge-green">Aktivan</span>':'<span class="badge badge-gray">Neaktivan</span>')+'</td>'
             +'<td>'+(p.markup_percent||'—')+'%</td>'
@@ -3040,11 +2705,8 @@ async function prvTab(tab, btn) {
             +'<td style="color:#10b981;font-weight:600">'+fmtEur(p.prihod_eur)+'</td>'
             +'<td>'+fmtEur(p.net_eur)+'</td>'
             +'<td style="color:#8b5cf6">'+fmtEur(p.marza_eur)+'</td>'
-            +'</tr>').join('')}
-          </tbody></table>
-        </div>
-      </div>
-    \`
+            +'</tr>').join('')
+    + '</tbody></table> </div> </div>'
     makeChart('chart-prv-bar','bar',{
       labels:topPrv.map(p=>p.name.length>18?p.name.substring(0,18)+'…':p.name),
       datasets:[
@@ -3061,19 +2723,8 @@ async function prvTab(tab, btn) {
   else if (tab === 'fakture') {
     const dugovanja = d.fakture.dugovanja || []
     const fakture = d.fakture.fakture || []
-    content.innerHTML = \`
-      <div style="margin-bottom:16px">
-        <div style="font-weight:600;margin-bottom:12px;font-size:14px;color:#f1f5f9">Dugovanja prema provajderima</div>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px" id="dug-kpi"></div>
-      </div>
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Fakture</div>
-        <div style="overflow:auto;max-height:400px">
-          <table><thead><tr>
-            <th>Provajder</th><th>Broj fakture</th><th>Iznos</th><th>Plaćeno</th><th>Ostatak</th>
-            <th>Datum izdavanja</th><th>Dospeće</th>
-          </tr></thead><tbody>
-          \${fakture.map(f=>'<tr>'
+    content.innerHTML = '<div style="margin-bottom:16px"> <div style="font-weight:600;margin-bottom:12px;font-size:14px;color:#f1f5f9">Dugovanja prema provajderima</div> <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px" id="dug-kpi"></div> </div> <div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Fakture</div> <div style="overflow:auto;max-height:400px"> <table><thead><tr> <th>Provajder</th><th>Broj fakture</th><th>Iznos</th><th>Plaćeno</th><th>Ostatak</th> <th>Datum izdavanja</th><th>Dospeće</th> </tr></thead><tbody>'
+    + fakture.map(f=>'<tr>'
             +'<td style="font-weight:600">'+f.provajder+'</td>'
             +'<td><code style="font-size:11px;color:#60a5fa">'+(f.invoice_number||'—')+'</code></td>'
             +'<td>'+(f.currency==='EUR'?fmtEur(f.amount):fmtRsd(f.amount))+'</td>'
@@ -3081,32 +2732,27 @@ async function prvTab(tab, btn) {
             +'<td style="color:'+(f.ostatak>0?'#ef4444':'#10b981')+';font-weight:600">'+(f.currency==='EUR'?fmtEur(f.ostatak):fmtRsd(f.ostatak))+'</td>'
             +'<td>'+(f.issued_at||'—')+'</td>'
             +'<td style="color:'+(f.due_at&&new Date(f.due_at)<new Date()?'#ef4444':'#f59e0b')+'">'+(f.due_at||'—')+'</td>'
-            +'</tr>').join('')}
-          </tbody></table>
-        </div>
-      </div>
-    \`
+            +'</tr>').join('')
+    + '</tbody></table> </div> </div>'
     const kpiEl = document.getElementById('dug-kpi')
     dugovanja.forEach((d,i)=>{
-      kpiEl.innerHTML += \`
-        <div style="background:#0f172a;border:1px solid #334155;border-radius:10px;padding:14px">
-          <div style="font-size:12px;font-weight:600;color:#f1f5f9;margin-bottom:8px">\${d.provajder}</div>
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:#64748b;margin-bottom:4px"><span>Fakturisano:</span><span style="color:#94a3b8">\${d.currency==='EUR'?fmtEur(d.ukupno_fakturisano):fmtRsd(d.ukupno_fakturisano)}</span></div>
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:#64748b;margin-bottom:4px"><span>Plaćeno:</span><span style="color:#10b981">\${d.currency==='EUR'?fmtEur(d.ukupno_placeno):fmtRsd(d.ukupno_placeno)}</span></div>
-          <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-top:6px;padding-top:6px;border-top:1px solid #334155"><span style="color:#64748b">Duguje:</span><span style="color:\${d.duguje>0?'#ef4444':'#10b981'}">\${d.currency==='EUR'?fmtEur(d.duguje):fmtRsd(d.duguje)}</span></div>
-        </div>
-      \`
+      kpiEl.innerHTML += '<div style="background:#0f172a;border:1px solid #334155;border-radius:10px;padding:14px"> <div style="font-size:12px;font-weight:600;color:#f1f5f9;margin-bottom:8px">'
+    + d.provajder
+    + '</div>\n          <div style="display:flex;justify-content:space-between;font-size:12px;color:#64748b;margin-bottom:4px"><span>Fakturisano:</span><span style="color:#94a3b8">'
+    + d.currency==='EUR'?fmtEur(d.ukupno_fakturisano):fmtRsd(d.ukupno_fakturisano)
+    + '</span></div>\n          <div style="display:flex;justify-content:space-between;font-size:12px;color:#64748b;margin-bottom:4px"><span>Plaćeno:</span><span style="color:#10b981">'
+    + d.currency==='EUR'?fmtEur(d.ukupno_placeno):fmtRsd(d.ukupno_placeno)
+    + '</span></div>\n          <div style="display:flex;justify-content:space-between;font-size:13px;font-weight:700;margin-top:6px;padding-top:6px;border-top:1px solid #334155"><span style="color:#64748b">Duguje:</span><span style="color:'
+    + d.duguje>0?'#ef4444':'#10b981'
+    + '">'
+    + d.currency==='EUR'?fmtEur(d.duguje):fmtRsd(d.duguje)
+    + '</span></div>\n        </div>\n      '
     })
   }
 
   else if (tab === 'trend') {
-    const rows = (await axios.get(\`/api/provajderi/trend?\${dateParams()}\`)).data
-    content.innerHTML = \`
-      <div class="card">
-        <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Trend rezervacija po provajderima (top 6)</div>
-        <div class="chart-container" style="height:340px"><canvas id="chart-prv-trend"></canvas></div>
-      </div>
-    \`
+    const rows = (await axios.get('/api/provajderi/trend?' + dateParams())).data
+    content.innerHTML = '<div class="card"> <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Trend rezervacija po provajderima (top 6)</div> <div class="chart-container" style="height:340px"><canvas id="chart-prv-trend"></canvas></div> </div>'
     const meseci = [...new Set(rows.map(r=>r.mesec))].sort()
     const provSet = [...new Set(rows.map(r=>r.provajder))]
     makeChart('chart-prv-trend','line',{
@@ -3201,22 +2847,10 @@ function renderRangTabela() {
   }
 
   const content = document.getElementById('agt-content')
-  content.innerHTML = \`
-    <div class="card">
-      <div style="font-size:12px;color:#475569;margin-bottom:12px;padding:8px 12px;background:#0f172a;border-radius:8px;border:1px solid #1e3a5f">
-        <i class="fas fa-info-circle mr-1" style="color:#3b82f6"></i>
-        <strong style="color:#93c5fd">Gross marža</strong> = Prihod − Net trošak &nbsp;|&nbsp;
-        <strong style="color:#fcd34d">Komisija agenciji</strong> = Prihod × % (ili fiksni iznos) &nbsp;|&nbsp;
-        <strong style="color:#6ee7b7">Naša marža</strong> = Gross − Komisija &nbsp;|&nbsp;
-        <strong style="color:#34d399">Bez PDV</strong> = Naša marža × 0.80 &nbsp;|&nbsp;
-        <strong style="color:#a78bfa">Marža %</strong> = Naša marža ÷ Prihod × 100 &nbsp;|&nbsp;
-        <i class="fas fa-info-circle mr-1" style="color:#475569"></i><span style="color:#475569">Klikni na header kolone za sortiranje</span>
-      </div>
-      <div style="overflow:auto;max-height:600px">
-        <table><thead><tr>
-          \${RANG_COLS.map(c => '<th onclick="sortRang(&#39;'+c.key+'&#39;)" style="'+thStyle(c.key)+'">'+c.label+arrow(c.key)+'</th>').join('')}
-        </tr></thead><tbody>
-        \${rang.map((r, i) => {
+  content.innerHTML = '<div class="card"> <div style="font-size:12px;color:#475569;margin-bottom:12px;padding:8px 12px;background:#0f172a;border-radius:8px;border:1px solid #1e3a5f"> <i class="fas fa-info-circle mr-1" style="color:#3b82f6"></i> <strong style="color:#93c5fd">Gross marža</strong> = Prihod − Net trošak &nbsp;|&nbsp; <strong style="color:#fcd34d">Komisija agenciji</strong> = Prihod × % (ili fiksni iznos) &nbsp;|&nbsp; <strong style="color:#6ee7b7">Naša marža</strong> = Gross − Komisija &nbsp;|&nbsp; <strong style="color:#34d399">Bez PDV</strong> = Naša marža × 0.80 &nbsp;|&nbsp; <strong style="color:#a78bfa">Marža %</strong> = Naša marža ÷ Prihod × 100 &nbsp;|&nbsp; <i class="fas fa-info-circle mr-1" style="color:#475569"></i><span style="color:#475569">Klikni na header kolone za sortiranje</span> </div> <div style="overflow:auto;max-height:600px"> <table><thead><tr>'
+    + RANG_COLS.map(c => '<th onclick="sortRang(&#39;'+c.key+'&#39;)" style="'+thStyle(c.key)+'">'+c.label+arrow(c.key)+'</th>').join('')
+    + '</tr></thead><tbody>'
+    + rang.map((r, i) => {
           const nm = parseFloat(r.nasa_marza || 0)
           const prihod = parseFloat(r.prihod || 0)
           const marzaPct = prihod > 0 ? (nm / prihod * 100).toFixed(1) : null
@@ -3243,11 +2877,7 @@ function renderRangTabela() {
             +'</div>'
             +'</td>'
             +'</tr>'
-        }).join('')}
-        </tbody></table>
-      </div>
-    </div>
-  \`
+    + ').join(\'\')}\n        </tbody></table>\n      </div>\n    </div>\n  '
 }
 
 // ═══════════════════════════════════════════
@@ -3285,7 +2915,7 @@ async function fetchStatusPage() {
 
   try {
     const resp = await axios.get(
-      \`/api/rezervacije/po-statusu?status=\${status}&limit=\${pageSize}&offset=\${offset}&\${dateParams()}\`
+      '/api/rezervacije/po-statusu?status=' + status + '&limit=' + pageSize + '&offset=' + offset + '&' + dateParams()
     )
     const rows = resp.data.rows || []
     const stats = resp.data.stats || {}
@@ -3294,16 +2924,27 @@ async function fetchStatusPage() {
 
     // Subtitle sa agregatima
     document.getElementById('status-table-sub').innerHTML =
-      \`<span style="color:#10b981;font-weight:600">\${fmtInt(stats.total)} rezervacija</span> &nbsp;•&nbsp;
-       Ukupno: <span style="color:#10b981;font-weight:600">\${fmtEur(stats.ukupno_eur)}</span> &nbsp;•&nbsp;
-       Prosečna cena: <span style="color:#f59e0b">\${fmtEur(stats.prosecna_cena)}</span> &nbsp;•&nbsp;
-       Avg. noćenja: <span style="color:#8b5cf6">\${stats.avg_nocenja ? parseFloat(stats.avg_nocenja).toFixed(1) : '—'}</span>\`
+      '<span style="color:#10b981;font-weight:600">'
+    + fmtInt(stats.total)
+    + ' rezervacija</span> &nbsp;•&nbsp;\n       Ukupno: <span style="color:#10b981;font-weight:600">'
+    + fmtEur(stats.ukupno_eur)
+    + '</span> &nbsp;•&nbsp;\n       Prosečna cena: <span style="color:#f59e0b">'
+    + fmtEur(stats.prosecna_cena)
+    + '</span> &nbsp;•&nbsp;\n       Avg. noćenja: <span style="color:#8b5cf6">'
+    + stats.avg_nocenja ? parseFloat(stats.avg_nocenja).toFixed(1) : '—'
+    + '</span>'
 
     // Paginacija info
     const from = offset + 1
     const to = Math.min(offset + rows.length, statusPageState.total)
     document.getElementById('status-pagination-info').textContent =
-      \`Prikazano \${from}–\${to} od \${fmtInt(statusPageState.total)} rezervacija\`
+      'Prikazano '
+    + from
+    + '–'
+    + to
+    + ' od '
+    + fmtInt(statusPageState.total)
+    + ' rezervacija'
 
     document.getElementById('btn-prev-page').disabled = page === 0
     document.getElementById('btn-next-page').disabled = to >= statusPageState.total
@@ -3401,11 +3042,56 @@ window.showModule = function(name) {
 }
 
 // ═══════════════════════════════════════════
-// INIT
+// INIT — čita hash iz URL-a, restaurira stanje
 // ═══════════════════════════════════════════
-initDates()
-document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString('sr')
-showModule('pregled')
+;(function initApp() {
+  const h = parseHash()
+
+  // 1) Datum — iz hasha ili default (trenutni mesec)
+  const now = new Date()
+  if (h.from && h.to) {
+    dateFrom = h.from
+    dateTo   = h.to
+    document.getElementById('date-from').value = dateFrom
+    document.getElementById('date-to').value   = dateTo
+  } else {
+    initDates()
+  }
+
+  document.getElementById('last-refresh').textContent = new Date().toLocaleTimeString('sr')
+
+  // 2) Modul
+  const mod = (h.mod && moduleConfig[h.mod]) ? h.mod : 'pregled'
+  currentModule = mod
+  document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'))
+  document.getElementById('nav-' + mod)?.classList.add('active')
+  document.getElementById('page-title').textContent    = moduleConfig[mod].title
+  document.getElementById('page-subtitle').textContent = moduleConfig[mod].sub
+
+  // 3) Tab — ako postoji, postavimo currentTab; modul će ga pokupiti pri renderingu
+  if (h.tab) currentTab = h.tab
+
+  // 4) Upiši čist hash (dodaje datume ako nisu bili)
+  updateHash()
+
+  // 5) Učitaj modul — ako ima tab, modul sam klikne pravi tab dugme
+  loadCurrentModule()
+
+  // 6) Slušaj promjene hasha (browser Back/Forward)
+  window.addEventListener('hashchange', () => {
+    const nh = parseHash()
+    const nmod = (nh.mod && moduleConfig[nh.mod]) ? nh.mod : 'pregled'
+    // Sinhronizuj datume
+    if (nh.from && nh.to) {
+      dateFrom = nh.from
+      dateTo   = nh.to
+      document.getElementById('date-from').value = dateFrom
+      document.getElementById('date-to').value   = dateTo
+    }
+    if (nh.tab) currentTab = nh.tab
+    showModule(nmod, true) // skipHash=true da ne piše ponovo
+  })
+})()
 </script>
 
 <!-- BOTTOM NAV (samo mobile) -->
