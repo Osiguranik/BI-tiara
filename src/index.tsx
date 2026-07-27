@@ -1634,11 +1634,11 @@ const SERVICE_LABELS = { transfer: 'Transfer', flight_ticket: 'Avio karta', trav
 
 function statusBadge(s) {
   const cls = { accepted:'badge-green', rejected:'badge-red', pending:'badge-yellow', none:'badge-gray', cancelled_refund:'badge-red', cancelled_transfer:'badge-yellow', cancelled_penalty:'badge-red', overpayment:'badge-blue' }
-  return \`<span class="badge \${cls[s]||'badge-gray'}">\${STATUS_LABELS[s]||s}</span>\`
+  return '<span class="badge '+(cls[s]||'badge-gray')+'">'+( STATUS_LABELS[s]||s)+'</span>'
 }
 function payBadge(s) {
   const cls = { paid:'badge-green', partial:'badge-yellow', pending:'badge-gray', refunded:'badge-blue', transferred:'badge-blue' }
-  return \`<span class="badge \${cls[s]||'badge-gray'}">\${PAY_LABELS[s]||s}</span>\`
+  return '<span class="badge '+(cls[s]||'badge-gray')+'">'+( PAY_LABELS[s]||s)+'</span>'
 }
 
 // ═══════════════════════════════════════════
@@ -2047,14 +2047,14 @@ async function finTab(tab, btn) {
             const nm = parseFloat(r.nasa_marza||0)
             const nmBezPdv = nm * 0.80
             const pdvIznos = nm * 0.20
-            return \`<tr>
-              <td style="font-weight:600">\${r.mesec}</td>
-              <td style="color:#10b981">\${fmtEur(prihod)}</td>
-              <td style="color:#8b5cf6">\${fmtEur(r.gross_marza)}</td>
-              <td style="color:#10b981;font-weight:600">\${fmtEur(nm)}</td>
-              <td style="color:#34d399;font-weight:700">\${fmtEur(nmBezPdv)}</td>
-              <td style="color:#ef4444;font-size:12px">\${fmtEur(pdvIznos)}</td>
-            </tr>\`
+            return '<tr>'
+              +'<td style="font-weight:600">'+r.mesec+'</td>'
+              +'<td style="color:#10b981">'+fmtEur(prihod)+'</td>'
+              +'<td style="color:#8b5cf6">'+fmtEur(r.gross_marza)+'</td>'
+              +'<td style="color:#10b981;font-weight:600">'+fmtEur(nm)+'</td>'
+              +'<td style="color:#34d399;font-weight:700">'+fmtEur(nmBezPdv)+'</td>'
+              +'<td style="color:#ef4444;font-size:12px">'+fmtEur(pdvIznos)+'</td>'
+              +'</tr>'
           }).join('')}
           <tr style="background:#0f172a;font-weight:700;border-top:2px solid #334155">
             <td style="color:#f1f5f9">UKUPNO</td>
@@ -2175,16 +2175,16 @@ async function finTab(tab, btn) {
             const nmBezPdv = nm * 0.80
             const pdvIznos = nm * 0.20
             const nmPct = gm > 0 ? fmt(nm/gm*100,1) : '—'
-            return \`<tr>
-              <td style="font-weight:600">\${r.mesec}</td>
-              <td style="color:#10b981">\${fmtEur(r.ukupan_prihod)}</td>
-              <td style="color:#3b82f6">\${fmtEur(r.net_troskovi)}</td>
-              <td style="color:#8b5cf6">\${fmtEur(r.gross_marza)}</td>
-              <td style="color:#f59e0b;font-weight:600">\${fmtEur(r.komisije_agencijama)}</td>
-              <td style="color:#10b981;font-weight:700">\${fmtEur(nm)}</td>
-              <td style="color:#34d399;font-weight:700">\${fmtEur(nmBezPdv)}</td>
-              <td style="color:#ef4444;font-size:12px">\${fmtEur(pdvIznos)}</td>
-            </tr>\`
+            return '<tr>'
+              +'<td style="font-weight:600">'+r.mesec+'</td>'
+              +'<td style="color:#10b981">'+fmtEur(r.ukupan_prihod)+'</td>'
+              +'<td style="color:#3b82f6">'+fmtEur(r.net_troskovi)+'</td>'
+              +'<td style="color:#8b5cf6">'+fmtEur(r.gross_marza)+'</td>'
+              +'<td style="color:#f59e0b;font-weight:600">'+fmtEur(r.komisije_agencijama)+'</td>'
+              +'<td style="color:#10b981;font-weight:700">'+fmtEur(nm)+'</td>'
+              +'<td style="color:#34d399;font-weight:700">'+fmtEur(nmBezPdv)+'</td>'
+              +'<td style="color:#ef4444;font-size:12px">'+fmtEur(pdvIznos)+'</td>'
+              +'</tr>'
           }).join('')}
           <tr style="background:#0f172a;font-weight:700;border-top:2px solid #334155">
             <td style="color:#f1f5f9">UKUPNO</td>
@@ -2719,17 +2719,17 @@ async function rezTab(tab, btn) {
         \${statusi.map(r=>{
           const col = STATUS_COLORS[r.status]||'#64748b'
           const pct = ukupnoRez>0?(parseInt(r.cnt)/ukupnoRez*100).toFixed(1):0
-          return \`<div onclick="loadStatusTable('\${r.status}',this)"
-            style="background:#0f172a;border:2px solid \${col}33;border-radius:10px;padding:12px;cursor:pointer;transition:all .2s"
-            class="status-filter-card" data-status="\${r.status}">
-            <div style="font-size:11px;color:#64748b;margin-bottom:4px">\${STATUS_LABELS[r.status]||r.status}</div>
-            <div style="font-size:22px;font-weight:700;color:\${col}">\${fmtInt(r.cnt)}</div>
-            <div style="font-size:11px;color:#475569;margin-top:2px">\${fmtEur(r.vrednost)}</div>
-            <div style="margin-top:6px;height:3px;background:#1e293b;border-radius:2px">
-              <div style="height:100%;width:\${pct}%;background:\${col};border-radius:2px;transition:width .6s"></div>
-            </div>
-            <div style="font-size:10px;color:#475569;margin-top:3px">\${pct}% rezervacija</div>
-          </div>\`
+          return '<div onclick="loadStatusTable(&#39;'+r.status+'&#39;,this)"'
+            +' style="background:#0f172a;border:2px solid '+col+'33;border-radius:10px;padding:12px;cursor:pointer;transition:all .2s"'
+            +' class="status-filter-card" data-status="'+r.status+'">'
+            +'<div style="font-size:11px;color:#64748b;margin-bottom:4px">'+(STATUS_LABELS[r.status]||r.status)+'</div>'
+            +'<div style="font-size:22px;font-weight:700;color:'+col+'">'+fmtInt(r.cnt)+'</div>'
+            +'<div style="font-size:11px;color:#475569;margin-top:2px">'+fmtEur(r.vrednost)+'</div>'
+            +'<div style="margin-top:6px;height:3px;background:#1e293b;border-radius:2px">'
+            +'<div style="height:100%;width:'+pct+'%;background:'+col+';border-radius:2px;transition:width .6s"></div>'
+            +'</div>'
+            +'<div style="font-size:10px;color:#475569;margin-top:3px">'+pct+'% rezervacija</div>'
+            +'</div>'
         }).join('')}
       </div>
 
@@ -2972,19 +2972,19 @@ function agtTab(tab, btn) {
           </tr></thead><tbody id="agt-tbody">
           \${lista.map(u=>{
             const nm = parseFloat(u.nasa_marza||0)
-            return \`<tr>
-            <td style="font-weight:600">\${u.name}</td>
-            <td>\${u.is_active?'<span class="badge badge-green">Aktivan</span>':'<span class="badge badge-gray">Neaktivan</span>'}</td>
-            <td>\${fmtInt(u.broj_rezervacija)}</td>
-            <td style="color:#10b981">\${fmtInt(u.prihvacene)}</td>
-            <td style="color:#10b981;font-weight:600">\${fmtEur(u.ukupan_prihod)}</td>
-            <td style="color:#8b5cf6">\${fmtEur(u.gross_marza)}</td>
-            <td style="color:#f59e0b;font-weight:600">\${fmtEur(u.komisija_agenciji)}</td>
-            <td style="color:#10b981;font-weight:700">\${fmtEur(nm)}</td>
-            <td style="color:#34d399;font-weight:700">\${fmtEur(nm * 0.80)}</td>
-            <td style="color:#64748b">\${fmtEur(u.prosecna_vrednost)}</td>
-            <td style="font-size:12px;color:#64748b">\${u.poslednja_rezervacija?.split('T')[0]||'—'}</td>
-          </tr>\`}).join('')}
+            return '<tr>'
+            +'<td style="font-weight:600">'+u.name+'</td>'
+            +'<td>'+(u.is_active?'<span class="badge badge-green">Aktivan</span>':'<span class="badge badge-gray">Neaktivan</span>')+'</td>'
+            +'<td>'+fmtInt(u.broj_rezervacija)+'</td>'
+            +'<td style="color:#10b981">'+fmtInt(u.prihvacene)+'</td>'
+            +'<td style="color:#10b981;font-weight:600">'+fmtEur(u.ukupan_prihod)+'</td>'
+            +'<td style="color:#8b5cf6">'+fmtEur(u.gross_marza)+'</td>'
+            +'<td style="color:#f59e0b;font-weight:600">'+fmtEur(u.komisija_agenciji)+'</td>'
+            +'<td style="color:#10b981;font-weight:700">'+fmtEur(nm)+'</td>'
+            +'<td style="color:#34d399;font-weight:700">'+fmtEur(nm * 0.80)+'</td>'
+            +'<td style="color:#64748b">'+fmtEur(u.prosecna_vrednost)+'</td>'
+            +'<td style="font-size:12px;color:#64748b">'+(u.poslednja_rezervacija?.split('T')[0]||'—')+'</td>'
+            +'</tr>'}).join('')}
           </tbody></table>
         </div>
       </div>
@@ -3177,10 +3177,10 @@ function renderRangTabela() {
   const thStyle = (key) => {
     const active = window.rangSort.col === key
     const col = RANG_COLS.find(c => c.key === key)
-    return \`cursor:pointer;user-select:none;white-space:nowrap;
-      \${col?.style || ''}
-      \${active ? 'color:#3b82f6 !important;' : ''}
-      transition:color .15s\`
+    return 'cursor:pointer;user-select:none;white-space:nowrap;'
+      +(col?.style || '')
+      +(active ? 'color:#3b82f6 !important;' : '')
+      +'transition:color .15s'
   }
 
   const arrow = (key) => {
@@ -3204,7 +3204,7 @@ function renderRangTabela() {
       </div>
       <div style="overflow:auto;max-height:600px">
         <table><thead><tr>
-          \${RANG_COLS.map(c => '<th onclick="sortRang(\''+c.key+'\')" style="'+thStyle(c.key)+'">'+c.label+arrow(c.key)+'</th>').join('')}
+          \${RANG_COLS.map(c => '<th onclick="sortRang(&#39;'+c.key+'&#39;)" style="'+thStyle(c.key)+'">'+c.label+arrow(c.key)+'</th>').join('')}
         </tr></thead><tbody>
         \${rang.map((r, i) => {
           const nm = parseFloat(r.nasa_marza || 0)
@@ -3213,26 +3213,26 @@ function renderRangTabela() {
           const marzaPctColor = marzaPct === null ? '#64748b' : parseFloat(marzaPct) >= 20 ? '#10b981' : parseFloat(marzaPct) >= 10 ? '#f59e0b' : '#ef4444'
           const stopa = parseFloat(r.stopa_otkazivanja || 0)
           const stopaColor = stopa > 20 ? '#ef4444' : stopa > 10 ? '#f59e0b' : '#10b981'
-          return \`<tr>
-            <td style="color:#64748b;font-weight:600">\${i + 1}</td>
-            <td style="font-weight:600;color:#f1f5f9">\${r.name}</td>
-            <td>\${fmtInt(r.rezervacije)}</td>
-            <td style="color:#10b981;font-weight:600">\${fmtEur(r.prihod)}</td>
-            <td style="color:#8b5cf6">\${fmtEur(r.gross_marza)}</td>
-            <td style="color:#f59e0b;font-weight:600">\${fmtEur(r.komisija_agenciji)}</td>
-            <td style="color:#10b981;font-weight:700">\${fmtEur(nm)}</td>
-            <td style="font-weight:700;color:\${marzaPctColor}">\${marzaPct !== null ? marzaPct + '%' : '—'}</td>
-            <td style="color:#34d399;font-weight:700">\${fmtEur(nm * 0.80)}</td>
-            <td>\${r.avg_nocenja ? parseFloat(r.avg_nocenja).toFixed(1) : '—'}</td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px">
-                <div class="progress-bar" style="width:60px">
-                  <div class="progress-fill" style="width:\${Math.min(stopa * 3, 100)}%;background:\${stopaColor}"></div>
-                </div>
-                <span style="font-size:12px;color:\${stopaColor}">\${stopa}%</span>
-              </div>
-            </td>
-          </tr>\`
+          return '<tr>'
+            +'<td style="color:#64748b;font-weight:600">'+(i + 1)+'</td>'
+            +'<td style="font-weight:600;color:#f1f5f9">'+r.name+'</td>'
+            +'<td>'+fmtInt(r.rezervacije)+'</td>'
+            +'<td style="color:#10b981;font-weight:600">'+fmtEur(r.prihod)+'</td>'
+            +'<td style="color:#8b5cf6">'+fmtEur(r.gross_marza)+'</td>'
+            +'<td style="color:#f59e0b;font-weight:600">'+fmtEur(r.komisija_agenciji)+'</td>'
+            +'<td style="color:#10b981;font-weight:700">'+fmtEur(nm)+'</td>'
+            +'<td style="font-weight:700;color:'+marzaPctColor+'">'+(marzaPct !== null ? marzaPct + '%' : '—')+'</td>'
+            +'<td style="color:#34d399;font-weight:700">'+fmtEur(nm * 0.80)+'</td>'
+            +'<td>'+(r.avg_nocenja ? parseFloat(r.avg_nocenja).toFixed(1) : '—')+'</td>'
+            +'<td>'
+            +'<div style="display:flex;align-items:center;gap:8px">'
+            +'<div class="progress-bar" style="width:60px">'
+            +'<div class="progress-fill" style="width:'+Math.min(stopa * 3, 100)+'%;background:'+stopaColor+'"></div>'
+            +'</div>'
+            +'<span style="font-size:12px;color:'+stopaColor+'">'+stopa+'%</span>'
+            +'</div>'
+            +'</td>'
+            +'</tr>'
         }).join('')}
         </tbody></table>
       </div>
@@ -3307,18 +3307,18 @@ async function fetchStatusPage() {
           const komisija = r.commission_type === 'percent'
             ? Math.round(cena * (r.commission_value || 0) / 100 * 100) / 100
             : (r.commission_value || 0)
-          return \`<tr>
-            <td><code style="font-size:11px;color:#60a5fa">\${r.reference || '—'}</code></td>
-            <td style="font-weight:500">\${r.agencija || '—'}</td>
-            <td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\${r.hotel_name||''}">\${r.hotel_name || '—'}</td>
-            <td>\${r.checkin || '—'}</td>
-            <td style="text-align:center">\${r.nights || '—'}</td>
-            <td style="color:#10b981;font-weight:600">\${fmtEur(cena)}</td>
-            <td style="color:#64748b;font-size:12px">\${net > 0 ? fmtEur(net) : '—'}</td>
-            <td>\${payBadge(r.payment_status)}</td>
-            <td style="font-size:12px;color:#94a3b8">\${r.payment_method || '—'}</td>
-            <td style="font-size:12px;color:#64748b">\${r.created_at ? r.created_at.split('T')[0] : '—'}</td>
-          </tr>\`
+          return '<tr>'
+            +'<td><code style="font-size:11px;color:#60a5fa">'+(r.reference || '—')+'</code></td>'
+            +'<td style="font-weight:500">'+(r.agencija || '—')+'</td>'
+            +'<td style="font-size:12px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(r.hotel_name||'')+'">'+(r.hotel_name || '—')+'</td>'
+            +'<td>'+(r.checkin || '—')+'</td>'
+            +'<td style="text-align:center">'+(r.nights || '—')+'</td>'
+            +'<td style="color:#10b981;font-weight:600">'+fmtEur(cena)+'</td>'
+            +'<td style="color:#64748b;font-size:12px">'+(net > 0 ? fmtEur(net) : '—')+'</td>'
+            +'<td>'+payBadge(r.payment_status)+'</td>'
+            +'<td style="font-size:12px;color:#94a3b8">'+(r.payment_method || '—')+'</td>'
+            +'<td style="font-size:12px;color:#64748b">'+(r.created_at ? r.created_at.split('T')[0] : '—')+'</td>'
+            +'</tr>'
         }).join('')
 
     // Resetuj search
