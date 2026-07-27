@@ -1223,7 +1223,7 @@ const html = `<!DOCTYPE html>
   /* ── CARDS ── */
   .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; }
   .kpi-card { background: linear-gradient(135deg, #1e293b, #0f172a); border: 1px solid #334155; border-radius: 12px; padding: 20px; position: relative; overflow: hidden; }
-  .kpi-card::before { content:''; position:absolute; top:-30px; right:-30px; width:100px; height:100px; border-radius:50%; opacity:.1; }
+  .kpi-card::before { content:none; position:absolute; top:-30px; right:-30px; width:100px; height:100px; border-radius:50%; opacity:.1; }
   .kpi-blue::before { background:#3b82f6; }
   .kpi-green::before { background:#10b981; }
   .kpi-yellow::before { background:#f59e0b; }
@@ -1967,7 +1967,7 @@ async function finTab(tab, btn) {
               +'<td style="color:#34d399;font-weight:700">'+fmtEur(nmBezPdv)+'</td>'
               +'<td style="color:#ef4444;font-size:12px">'+fmtEur(pdvIznos)+'</td>'
               +'</tr>'
-    + ').join(\'\')}\n          <tr style="background:#0f172a;font-weight:700;border-top:2px solid #334155">\n            <td style="color:#f1f5f9">UKUPNO</td>\n            <td style="color:#10b981">'
+    }).join('') + '<tr style="background:#0f172a;font-weight:700;border-top:2px solid #334155">             <td style="color:#f1f5f9">UKUPNO</td>             <td style="color:#10b981">'
     + fmtEur(totalPrihod)
     + '</td>\n            <td style="color:#8b5cf6">'
     + fmtEur(totalGross)
@@ -2060,7 +2060,7 @@ async function finTab(tab, btn) {
               +'<td style="color:#34d399;font-weight:700">'+fmtEur(nmBezPdv)+'</td>'
               +'<td style="color:#ef4444;font-size:12px">'+fmtEur(pdvIznos)+'</td>'
               +'</tr>'
-    + ').join(\'\')}\n          <tr style="background:#0f172a;font-weight:700;border-top:2px solid #334155">\n            <td style="color:#f1f5f9">UKUPNO</td>\n            <td style="color:#10b981">'
+    }).join('') + '<tr style="background:#0f172a;font-weight:700;border-top:2px solid #334155">             <td style="color:#f1f5f9">UKUPNO</td>             <td style="color:#10b981">'
     + fmtEur(totalPrihod)
     + '</td>\n            <td style="color:#3b82f6">'
     + fmtEur(totalNet)
@@ -2542,7 +2542,7 @@ async function rezTab(tab, btn) {
             +'</div>'
             +'<div style="font-size:10px;color:#475569;margin-top:3px">'+pct+'% rezervacija</div>'
             +'</div>'
-    + ').join(\'\')}\n      </div>\n\n      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">\n        <div class="card">\n          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Broj rezervacija po statusu</div>\n          <div class="chart-container" style="height:240px"><canvas id="chart-rez-status"></canvas></div>\n        </div>\n        <div class="card">\n          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Vrednost po statusu (EUR)</div>\n          <div class="chart-container" style="height:240px"><canvas id="chart-rez-status-vred"></canvas></div>\n        </div>\n      </div>\n\n      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">\n        <div class="card">\n          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Platni status — broj</div>\n          <div class="chart-container" style="height:220px"><canvas id="chart-rez-pay"></canvas></div>\n        </div>\n        <div class="card">\n          <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Platni status — vrednost (EUR)</div>\n          <div class="chart-container" style="height:220px"><canvas id="chart-rez-pay-vred"></canvas></div>\n        </div>\n      </div>\n\n      <div class="card" id="status-table-card" style="display:none">\n        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">\n          <div>\n            <div style="font-weight:600;font-size:14px;color:#f1f5f9" id="status-table-title">Rezervacije</div>\n            <div style="font-size:12px;color:#64748b;margin-top:2px" id="status-table-sub"></div>\n          </div>\n          <div style="display:flex;gap:8px;align-items:center">\n            <input type="text" id="status-search" placeholder="Pretraži..." oninput="filterTable(this,\'status-tbody\')"\n              style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:6px 12px;font-size:13px;outline:none;width:200px">\n            <button class="btn btn-ghost" onclick="closeStatusTable()" style="font-size:12px">\n              <i class="fas fa-times"></i> Zatvori\n            </button>\n          </div>\n        </div>\n        <div style="overflow:auto;max-height:480px">\n          <table><thead><tr>\n            <th>Reference</th>\n            <th>Agencija</th>\n            <th>Hotel</th>\n            <th>Check-in</th>\n            <th>Noć.</th>\n            <th>Cena (EUR)</th>\n            <th>Net (EUR)</th>\n            <th>Platni status</th>\n            <th>Način plaćanja</th>\n            <th>Datum</th>\n          </tr></thead>\n          <tbody id="status-tbody"></tbody></table>\n        </div>\n        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;flex-wrap:wrap;gap:8px">\n          <div id="status-pagination-info" style="font-size:12px;color:#64748b"></div>\n          <div style="display:flex;gap:6px">\n            <button class="btn btn-ghost" id="btn-prev-page" onclick="statusPage(-1)" style="font-size:12px">\n              <i class="fas fa-chevron-left"></i> Prethodna\n            </button>\n            <button class="btn btn-ghost" id="btn-next-page" onclick="statusPage(1)" style="font-size:12px">\n              Sledeća <i class="fas fa-chevron-right"></i>\n            </button>\n          </div>\n        </div>\n      </div>\n    '
+    }).join('') + '</div>        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">         <div class="card">           <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Broj rezervacija po statusu</div>           <div class="chart-container" style="height:240px"><canvas id="chart-rez-status"></canvas></div>         </div>         <div class="card">           <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Vrednost po statusu (EUR)</div>           <div class="chart-container" style="height:240px"><canvas id="chart-rez-status-vred"></canvas></div>         </div>       </div>        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">         <div class="card">           <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Platni status — broj</div>           <div class="chart-container" style="height:220px"><canvas id="chart-rez-pay"></canvas></div>         </div>         <div class="card">           <div style="font-weight:600;margin-bottom:16px;font-size:14px;color:#f1f5f9">Platni status — vrednost (EUR)</div>           <div class="chart-container" style="height:220px"><canvas id="chart-rez-pay-vred"></canvas></div>         </div>       </div>        <div class="card" id="status-table-card" style="display:none">         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">           <div>             <div style="font-weight:600;font-size:14px;color:#f1f5f9" id="status-table-title">Rezervacije</div>             <div style="font-size:12px;color:#64748b;margin-top:2px" id="status-table-sub"></div>           </div>           <div style="display:flex;gap:8px;align-items:center">             <input type="text" id="status-search" placeholder="Pretraži..." oninput="filterTable(this,\'status-tbody\')"               style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;border-radius:8px;padding:6px 12px;font-size:13px;outline:none;width:200px">             <button class="btn btn-ghost" onclick="closeStatusTable()" style="font-size:12px">               <i class="fas fa-times"></i> Zatvori             </button>           </div>         </div>         <div style="overflow:auto;max-height:480px">           <table><thead><tr>             <th>Reference</th>             <th>Agencija</th>             <th>Hotel</th>             <th>Check-in</th>             <th>Noć.</th>             <th>Cena (EUR)</th>             <th>Net (EUR)</th>             <th>Platni status</th>             <th>Način plaćanja</th>             <th>Datum</th>           </tr></thead>           <tbody id="status-tbody"></tbody></table>         </div>         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;flex-wrap:wrap;gap:8px">           <div id="status-pagination-info" style="font-size:12px;color:#64748b"></div>           <div style="display:flex;gap:6px">             <button class="btn btn-ghost" id="btn-prev-page" onclick="statusPage(-1)" style="font-size:12px">               <i class="fas fa-chevron-left"></i> Prethodna             </button>             <button class="btn btn-ghost" id="btn-next-page" onclick="statusPage(1)" style="font-size:12px">               Sledeća <i class="fas fa-chevron-right"></i>             </button>           </div>         </div>       </div>'
 
     makeChart('chart-rez-status','doughnut',{
       labels:statusi.map(r=>STATUS_LABELS[r.status]||r.status),
@@ -2679,7 +2679,7 @@ function agtTab(tab, btn) {
             +'<td style="color:#64748b">'+fmtEur(u.prosecna_vrednost)+'</td>'
             +'<td style="font-size:12px;color:#64748b">'+(u.poslednja_rezervacija?.split('T')[0]||'—')+'</td>'
             +'</tr>'
-    + ').join(\'\')}\n          </tbody></table>\n        </div>\n      </div>\n    '
+    }).join('') + '</tbody></table>         </div>       </div>'
   }
 }
 
@@ -2877,7 +2877,7 @@ function renderRangTabela() {
             +'</div>'
             +'</td>'
             +'</tr>'
-    + ').join(\'\')}\n        </tbody></table>\n      </div>\n    </div>\n  '
+    }).join('') + '</tbody></table>       </div>     </div>'
 }
 
 // ═══════════════════════════════════════════
