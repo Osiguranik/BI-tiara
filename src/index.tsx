@@ -1096,7 +1096,7 @@ const html = `<!DOCTYPE html>
   <div class="sidebar-bottom" style="position:absolute;bottom:16px;left:0;right:0;padding:0 16px">
     <div style="font-size:11px;color:#334155;text-align:center">Poslednje osveženo: <span id="last-refresh">-</span></div>
     <button class="btn btn-ghost" style="width:100%;margin-top:8px;font-size:12px" onclick="refreshAll()">
-      <i class="fas fa-sync-alt"></i> Osvezi podatke
+      <i class="fas fa-sync-alt"></i> Osveži podatke
     </button>
     <a href="/logout" style="display:flex;align-items:center;justify-content:center;gap:6px;width:100%;margin-top:8px;padding:8px;border-radius:8px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#ef4444;font-size:12px;text-decoration:none;transition:background .2s" onmouseover="this.style.background='rgba(239,68,68,.2)'" onmouseout="this.style.background='rgba(239,68,68,.1)'">
       <i class="fas fa-sign-out-alt"></i> Odjava
