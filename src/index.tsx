@@ -1905,13 +1905,13 @@ usluge: async () => {
     <table><thead><tr>
       <th>Naziv</th><th>Tip</th><th>Provajder</th><th>Broj</th><th>Prihod</th>
     </tr></thead><tbody>
-    \${topUsluge.map(u=>\`<tr>
-      <td>\${u.naziv||'—'}</td>
-      <td><span class="badge badge-blue">\${SERVICE_LABELS[u.tip]||u.tip}</span></td>
-      <td>\${u.provajder||'—'}</td>
-      <td style="font-weight:600">\${fmtInt(u.broj)}</td>
-      <td>\${u.valuta==='EUR'?fmtEur(u.prihod):fmtRsd(u.prihod)}</td>
-    </tr>\`).join('')}
+    \${topUsluge.map(u=>'<tr>'
+      +'<td>'+(u.naziv||'—')+'</td>'
+      +'<td><span class="badge badge-blue">'+(SERVICE_LABELS[u.tip]||u.tip)+'</span></td>'
+      +'<td>'+(u.provajder||'—')+'</td>'
+      +'<td style="font-weight:600">'+fmtInt(u.broj)+'</td>'
+      +'<td>'+(u.valuta==='EUR'?fmtEur(u.prihod):fmtRsd(u.prihod))+'</td>'
+      +'</tr>').join('')}
     </tbody></table>
   \`
 },
@@ -1939,13 +1939,13 @@ organizatori: async () => {
         <table><thead><tr>
           <th>Organizator</th><th>Rezervacije</th><th>Prihod</th><th>Marža</th><th>Avg. noćenja</th>
         </tr></thead><tbody>
-        \${data.map(o=>\`<tr>
-          <td style="font-weight:600">\${o.organizator}</td>
-          <td>\${fmtInt(o.rezervacije)}</td>
-          <td style="color:#10b981">\${fmtEur(o.prihod)}</td>
-          <td style="color:#8b5cf6">\${fmtEur(o.marza)}</td>
-          <td>\${o.avg_nocenja?parseFloat(o.avg_nocenja).toFixed(1):'—'}</td>
-        </tr>\`).join('')}
+        \${data.map(o=>'<tr>'
+          +'<td style="font-weight:600">'+o.organizator+'</td>'
+          +'<td>'+fmtInt(o.rezervacije)+'</td>'
+          +'<td style="color:#10b981">'+fmtEur(o.prihod)+'</td>'
+          +'<td style="color:#8b5cf6">'+fmtEur(o.marza)+'</td>'
+          +'<td>'+(o.avg_nocenja?parseFloat(o.avg_nocenja).toFixed(1):'—')+'</td>'
+          +'</tr>').join('')}
         </tbody></table>
       </div>
     </div>
@@ -2234,12 +2234,12 @@ async function finTab(tab, btn) {
       <div class="card">
         <div style="overflow:auto;max-height:300px">
           <table><thead><tr><th>Mesec</th><th>Naplaćeno (EUR)</th><th>Naplaćeno (RSD)</th><th>Broj uplata</th></tr></thead>
-          <tbody>\${naplate.map(r=>\`<tr>
-            <td>\${r.mesec}</td>
-            <td style="color:#10b981;font-weight:600">\${fmtEur(r.naplaceno_eur)}</td>
-            <td>\${fmtRsd(r.naplaceno_rsd)}</td>
-            <td>\${fmtInt(r.broj_uplata)}</td>
-          </tr>\`).join('')}</tbody></table>
+          <tbody>\${naplate.map(r=>'<tr>'
+            +'<td>'+r.mesec+'</td>'
+            +'<td style="color:#10b981;font-weight:600">'+fmtEur(r.naplaceno_eur)+'</td>'
+            +'<td>'+fmtRsd(r.naplaceno_rsd)+'</td>'
+            +'<td>'+fmtInt(r.broj_uplata)+'</td>'
+            +'</tr>').join('')}</tbody></table>
         </div>
       </div>
     \`
@@ -2268,15 +2268,15 @@ async function finTab(tab, btn) {
           <table><thead><tr>
             <th>Dospeće</th><th>Rezervacija</th><th>Agencija</th><th>Hotel</th><th>Check-in</th><th>Iznos</th><th>Procenat</th>
           </tr></thead><tbody>
-          \${rows.map(r=>\`<tr>
-            <td style="color:\${new Date(r.due_at)<new Date()?'#ef4444':'#f59e0b'};font-weight:600">\${r.due_at||'—'}</td>
-            <td><code style="font-size:11px;color:#60a5fa">\${r.reference}</code></td>
-            <td>\${r.agencija||'—'}</td>
-            <td style="font-size:12px">\${r.hotel_name||'—'}</td>
-            <td>\${r.checkin||'—'}</td>
-            <td style="font-weight:600;color:#f59e0b">\${r.currency==='EUR'?fmtEur(r.amount):fmtRsd(r.amount)}</td>
-            <td>\${r.percentage}%</td>
-          </tr>\`).join('')}
+          \${rows.map(r=>'<tr>'
+            +'<td style="color:'+(new Date(r.due_at)<new Date()?'#ef4444':'#f59e0b')+';font-weight:600">'+(r.due_at||'—')+'</td>'
+            +'<td><code style="font-size:11px;color:#60a5fa">'+r.reference+'</code></td>'
+            +'<td>'+(r.agencija||'—')+'</td>'
+            +'<td style="font-size:12px">'+(r.hotel_name||'—')+'</td>'
+            +'<td>'+(r.checkin||'—')+'</td>'
+            +'<td style="font-weight:600;color:#f59e0b">'+(r.currency==='EUR'?fmtEur(r.amount):fmtRsd(r.amount))+'</td>'
+            +'<td>'+r.percentage+'%</td>'
+            +'</tr>').join('')}
           </tbody></table>
         </div>
       </div>
@@ -2299,14 +2299,14 @@ async function finTab(tab, btn) {
           <table><thead><tr>
             <th>Datum</th><th>Broj izvoda</th><th>Partija</th><th>Preth. stanje</th><th>Novo stanje</th><th>Potražni promet</th>
           </tr></thead><tbody>
-          \${izvodi.map(i=>\`<tr>
-            <td>\${i.datum_izvoda}</td>
-            <td><code style="font-size:11px;color:#60a5fa">\${i.broj_izvoda||'—'}</code></td>
-            <td style="font-size:12px;color:#94a3b8">\${i.partija||'—'}</td>
-            <td>\${fmtRsd(i.prethodno_stanje)}</td>
-            <td style="font-weight:600;color:#10b981">\${fmtRsd(i.novo_stanje)}</td>
-            <td style="color:#3b82f6">\${fmtRsd(i.potrazni_promet)}</td>
-          </tr>\`).join('')}
+          \${izvodi.map(i=>'<tr>'
+            +'<td>'+i.datum_izvoda+'</td>'
+            +'<td><code style="font-size:11px;color:#60a5fa">'+(i.broj_izvoda||'—')+'</code></td>'
+            +'<td style="font-size:12px;color:#94a3b8">'+(i.partija||'—')+'</td>'
+            +'<td>'+fmtRsd(i.prethodno_stanje)+'</td>'
+            +'<td style="font-weight:600;color:#10b981">'+fmtRsd(i.novo_stanje)+'</td>'
+            +'<td style="color:#3b82f6">'+fmtRsd(i.potrazni_promet)+'</td>'
+            +'</tr>').join('')}
           </tbody></table>
         </div>
       </div>
@@ -2322,7 +2322,7 @@ async function finTab(tab, btn) {
       </div>
       <div class="card"><div style="overflow:auto;max-height:300px">
         <table><thead><tr><th>Datum</th><th>Kurs (EUR/RSD)</th></tr></thead>
-        <tbody>\${rows.map(r=>\`<tr><td>\${r.date}</td><td style="font-weight:600;color:#f59e0b">\${fmt(r.value,4)}</td></tr>\`).join('')}
+        <tbody>\${rows.map(r=>'<tr><td>'+r.date+'</td><td style="font-weight:600;color:#f59e0b">'+fmt(r.value,4)+'</td></tr>').join('')}
         </tbody></table>
       </div></div>
     \`
@@ -2412,8 +2412,8 @@ async function finTab(tab, btn) {
         tabelaRows += \`<tr>
           <td style="font-size:12px;color:#94a3b8;padding-left:20px">\${k.naziv}</td>
           \${k.meseci.map((v) => v > 0
-            ? \`<td style="color:#fca5a5;font-size:12px;text-align:right">\${fmt(v,0)}</td>\`
-            : \`<td style="color:#334155;font-size:11px;text-align:right">—</td>\`
+            ? '<td style="color:#fca5a5;font-size:12px;text-align:right">'+fmt(v,0)+'</td>'
+            : '<td style="color:#334155;font-size:11px;text-align:right">—</td>'
           ).join('')}
           <td style="color:\${sekcijaColors[sek]};font-weight:600;text-align:right">\${fmtEur(k.ukupnoEur)}</td>
           <td style="color:#94a3b8;font-size:12px;text-align:right">\${fmtRsd(k.ukupnoRsd)}</td>
@@ -2423,7 +2423,7 @@ async function finTab(tab, btn) {
       const totM = sek==='Plate' ? tp.meseci : sek==='Operativni' ? to.meseci : tr.meseci
       tabelaRows += \`<tr style="background:#1a2235;font-weight:700">
         <td style="color:\${sekcijaColors[sek]}">Total \${sek}</td>
-        \${(totM||[]).map((v) => \`<td style="color:\${sekcijaColors[sek]};text-align:right;font-weight:700">\${v>0?fmt(v,0):'—'}</td>\`).join('')}
+        \${(totM||[]).map((v) => '<td style="color:'+sekcijaColors[sek]+';text-align:right;font-weight:700">'+(v>0?fmt(v,0):'—')+'</td>').join('')}
         <td style="color:\${sekcijaColors[sek]};text-align:right">\${fmtEur(sekcijaTotal[sek].eur)}</td>
         <td style="color:\${sekcijaColors[sek]};text-align:right">\${fmtRsd(sekcijaTotal[sek].rsd)}</td>
       </tr>\`
@@ -2432,7 +2432,7 @@ async function finTab(tab, btn) {
     // Total svi
     tabelaRows += \`<tr style="background:#0f172a;border-top:2px solid #334155;font-weight:700">
       <td style="color:#f87171">UKUPNO RASHODI</td>
-      \${(ts.meseci||[]).map((v) => \`<td style="color:#f87171;text-align:right;font-weight:700">\${v>0?fmt(v,0):'—'}</td>\`).join('')}
+      \${(ts.meseci||[]).map((v) => '<td style="color:#f87171;text-align:right;font-weight:700">'+(v>0?fmt(v,0):'—')+'</td>').join('')}
       <td style="color:#f87171;text-align:right">\${fmtEur(ts.eur)}</td>
       <td style="color:#f87171;text-align:right">\${fmtRsd(ts.rsd)}</td>
     </tr>\`
@@ -2454,7 +2454,7 @@ async function finTab(tab, btn) {
         <div style="overflow:auto;max-height:580px">
           <table style="min-width:900px"><thead><tr>
             <th style="min-width:160px">Kategorija</th>
-            \${MESECI_IME.map(m=>\`<th style="text-align:right;min-width:70px">\${m}</th>\`).join('')}
+            \${MESECI_IME.map(m=>'<th style="text-align:right;min-width:70px">'+m+'</th>').join('')}
             <th style="text-align:right;min-width:90px;color:#a78bfa">Ukupno EUR</th>
             <th style="text-align:right;min-width:110px">Ukupno RSD</th>
           </tr></thead><tbody>
@@ -2696,7 +2696,7 @@ async function rezTab(tab, btn) {
     const nacin = d.nacin_placanja || []
     document.getElementById('nacin-tabela').innerHTML = \`
       <table><thead><tr><th>Način plaćanja</th><th>Broj</th><th>Vrednost (EUR)</th></tr></thead>
-      <tbody>\${nacin.map(r=>\`<tr><td>\${r.nacin}</td><td>\${fmtInt(r.cnt)}</td><td style="color:#3b82f6">\${fmtEur(r.vrednost)}</td></tr>\`).join('')}
+      <tbody>\${nacin.map(r=>'<tr><td>'+r.nacin+'</td><td>'+fmtInt(r.cnt)+'</td><td style="color:#3b82f6">'+fmtEur(r.vrednost)+'</td></tr>').join('')}
       </tbody></table>
     \`
   }
@@ -2855,18 +2855,18 @@ async function rezTab(tab, btn) {
             <th>Datum</th><th>Rezervacija</th><th>Agencija</th><th>Hotel</th><th>Check-in</th>
             <th>Ukupan trošak</th><th>Provajder</th><th>Agencija</th><th>Refund</th><th>Isplaćeno</th>
           </tr></thead><tbody>
-          \${rows.map(r=>\`<tr>
-            <td>\${r.cancelled_at?.split('T')[0]||'—'}</td>
-            <td><code style="font-size:11px;color:#60a5fa">\${r.reference}</code></td>
-            <td style="font-size:12px">\${r.agencija||'—'}</td>
-            <td style="font-size:12px">\${r.hotel_name||'—'}</td>
-            <td>\${r.checkin||'—'}</td>
-            <td style="color:#ef4444;font-weight:600">\${fmtEur(r.total_cost)}</td>
-            <td style="color:#f59e0b">\${fmtEur(r.provider_amount)}</td>
-            <td style="color:#8b5cf6">\${fmtEur(r.agency_amount)}</td>
-            <td style="color:#10b981">\${fmtEur(r.refund_amount)}</td>
-            <td>\${r.paid_out?'<span class="badge badge-green">Da</span>':'<span class="badge badge-red">Ne</span>'}</td>
-          </tr>\`).join('')}
+          \${rows.map(r=>'<tr>'
+            +'<td>'+(r.cancelled_at?.split('T')[0]||'—')+'</td>'
+            +'<td><code style="font-size:11px;color:#60a5fa">'+r.reference+'</code></td>'
+            +'<td style="font-size:12px">'+(r.agencija||'—')+'</td>'
+            +'<td style="font-size:12px">'+(r.hotel_name||'—')+'</td>'
+            +'<td>'+(r.checkin||'—')+'</td>'
+            +'<td style="color:#ef4444;font-weight:600">'+fmtEur(r.total_cost)+'</td>'
+            +'<td style="color:#f59e0b">'+fmtEur(r.provider_amount)+'</td>'
+            +'<td style="color:#8b5cf6">'+fmtEur(r.agency_amount)+'</td>'
+            +'<td style="color:#10b981">'+fmtEur(r.refund_amount)+'</td>'
+            +'<td>'+(r.paid_out?'<span class="badge badge-green">Da</span>':'<span class="badge badge-red">Ne</span>')+'</td>'
+            +'</tr>').join('')}
           </tbody></table>
         </div>
       </div>
@@ -3022,15 +3022,15 @@ async function prvTab(tab, btn) {
             <th>Provajder</th><th>Status</th><th>Markup %</th><th>Rezervacije</th>
             <th>Prihod (EUR)</th><th>Net (EUR)</th><th>Marža (EUR)</th>
           </tr></thead><tbody>
-          \${lista.map(p=>\`<tr>
-            <td style="font-weight:600">\${p.name}</td>
-            <td>\${p.enabled?'<span class="badge badge-green">Aktivan</span>':'<span class="badge badge-gray">Neaktivan</span>'}</td>
-            <td>\${p.markup_percent||'—'}%</td>
-            <td>\${fmtInt(p.rezervacije)}</td>
-            <td style="color:#10b981;font-weight:600">\${fmtEur(p.prihod_eur)}</td>
-            <td>\${fmtEur(p.net_eur)}</td>
-            <td style="color:#8b5cf6">\${fmtEur(p.marza_eur)}</td>
-          </tr>\`).join('')}
+          \${lista.map(p=>'<tr>'
+            +'<td style="font-weight:600">'+p.name+'</td>'
+            +'<td>'+(p.enabled?'<span class="badge badge-green">Aktivan</span>':'<span class="badge badge-gray">Neaktivan</span>')+'</td>'
+            +'<td>'+(p.markup_percent||'—')+'%</td>'
+            +'<td>'+fmtInt(p.rezervacije)+'</td>'
+            +'<td style="color:#10b981;font-weight:600">'+fmtEur(p.prihod_eur)+'</td>'
+            +'<td>'+fmtEur(p.net_eur)+'</td>'
+            +'<td style="color:#8b5cf6">'+fmtEur(p.marza_eur)+'</td>'
+            +'</tr>').join('')}
           </tbody></table>
         </div>
       </div>
@@ -3063,15 +3063,15 @@ async function prvTab(tab, btn) {
             <th>Provajder</th><th>Broj fakture</th><th>Iznos</th><th>Plaćeno</th><th>Ostatak</th>
             <th>Datum izdavanja</th><th>Dospeće</th>
           </tr></thead><tbody>
-          \${fakture.map(f=>\`<tr>
-            <td style="font-weight:600">\${f.provajder}</td>
-            <td><code style="font-size:11px;color:#60a5fa">\${f.invoice_number||'—'}</code></td>
-            <td>\${f.currency==='EUR'?fmtEur(f.amount):fmtRsd(f.amount)}</td>
-            <td style="color:#10b981">\${f.currency==='EUR'?fmtEur(f.placeno):fmtRsd(f.placeno)}</td>
-            <td style="color:\${f.ostatak>0?'#ef4444':'#10b981'};font-weight:600">\${f.currency==='EUR'?fmtEur(f.ostatak):fmtRsd(f.ostatak)}</td>
-            <td>\${f.issued_at||'—'}</td>
-            <td style="color:\${f.due_at&&new Date(f.due_at)<new Date()?'#ef4444':'#f59e0b'}">\${f.due_at||'—'}</td>
-          </tr>\`).join('')}
+          \${fakture.map(f=>'<tr>'
+            +'<td style="font-weight:600">'+f.provajder+'</td>'
+            +'<td><code style="font-size:11px;color:#60a5fa">'+(f.invoice_number||'—')+'</code></td>'
+            +'<td>'+(f.currency==='EUR'?fmtEur(f.amount):fmtRsd(f.amount))+'</td>'
+            +'<td style="color:#10b981">'+(f.currency==='EUR'?fmtEur(f.placeno):fmtRsd(f.placeno))+'</td>'
+            +'<td style="color:'+(f.ostatak>0?'#ef4444':'#10b981')+';font-weight:600">'+(f.currency==='EUR'?fmtEur(f.ostatak):fmtRsd(f.ostatak))+'</td>'
+            +'<td>'+(f.issued_at||'—')+'</td>'
+            +'<td style="color:'+(f.due_at&&new Date(f.due_at)<new Date()?'#ef4444':'#f59e0b')+'">'+(f.due_at||'—')+'</td>'
+            +'</tr>').join('')}
           </tbody></table>
         </div>
       </div>
@@ -3204,7 +3204,7 @@ function renderRangTabela() {
       </div>
       <div style="overflow:auto;max-height:600px">
         <table><thead><tr>
-          \${RANG_COLS.map(c => \`<th onclick="sortRang('\${c.key}')" style="\${thStyle(c.key)}">\${c.label}\${arrow(c.key)}</th>\`).join('')}
+          \${RANG_COLS.map(c => '<th onclick="sortRang(\''+c.key+'\')" style="'+thStyle(c.key)+'">'+c.label+arrow(c.key)+'</th>').join('')}
         </tr></thead><tbody>
         \${rang.map((r, i) => {
           const nm = parseFloat(r.nasa_marza || 0)
