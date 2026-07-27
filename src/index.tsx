@@ -618,8 +618,9 @@ async function getGoogleToken(clientEmail: string, privateKeyPem: string, scope:
   return data.access_token
 }
 
-async function sheetsGet(token: string, spreadsheetId: string, range: string): Promise<string[][]> {
-  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}`
+async function sheetsGet(token: string, spreadsheetId: string, range: string): Promise<(string|number)[][]> {
+  // UNFORMATTED_VALUE: vraća stvarne numeričke vrijednosti, ne formatirani prikaz
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${encodeURIComponent(range)}?valueRenderOption=UNFORMATTED_VALUE`
   const resp = await fetch(url, {
     headers: { Authorization: `Bearer ${token}` }
   })
@@ -627,12 +628,12 @@ async function sheetsGet(token: string, spreadsheetId: string, range: string): P
     const txt = await resp.text()
     throw new Error(`Sheets API failed: ${resp.status} ${txt}`)
   }
-  const data = await resp.json() as { values?: string[][] }
+  const data = await resp.json() as { values?: (string|number)[][] }
   return data.values || []
 }
 
 // Parser: parsira tab "2026" i vraća troškove
-function parseTroskovi2026(rows: string[][]): {
+function parseTroskovi2026(rows: (string|number)[][]): {
   kategorije: Array<{ sekcija: string; naziv: string; meseci: number[]; ukupnoRsd: number; ukupnoEur: number }>,
   kurs: number,
   totalPlate: { meseci: number[]; rsd: number; eur: number },
@@ -643,9 +644,22 @@ function parseTroskovi2026(rows: string[][]): {
   // Header: R1 = ["", "jan", "feb", ..., "dec", "Ukupno RSD", "Ukupno EUR"]
   // Meseci su na indeksima 1..12, Ukupno RSD=13, Ukupno EUR=14
 
-  const parseNum = (v: string | undefined) => {
-    if (!v) return 0
-    const s = v.replace(/\s/g,'').replace(/\./g,'').replace(',','.')
+  const parseNum = (v: string | number | undefined | null) => {
+    if (v === null || v === undefined || v === '') return 0
+    // UNFORMATTED_VALUE vraća JS brojeve direktno - najčešći slučaj
+    if (typeof v === 'number') return isNaN(v) ? 0 : v
+    // Sheets API može vraćati i stringove u srpskom formatu (tačka = hiljade, zarez = decimal)
+    // ili engleskom formatu (tačka = decimal).
+    const trimmed = String(v).replace(/\s/g,'')
+    if (!trimmed) return 0
+    let s: string
+    if (trimmed.includes(',')) {
+      // Srpski format: 1.234.567,89 → 1234567.89
+      s = trimmed.replace(/\./g,'').replace(',','.')
+    } else {
+      // Engleski/numerički format: 1234567.89 → direktno
+      s = trimmed
+    }
     const n = parseFloat(s)
     return isNaN(n) ? 0 : n
   }
@@ -653,7 +667,7 @@ function parseTroskovi2026(rows: string[][]): {
   const getRow = (idx: number) => rows[idx] || []  // 0-based index
 
   // Izvlači 12 mesečnih vrednosti iz reda (1-based col 1..12)
-  const getMeseci = (row: string[]) => Array.from({length:12}, (_,i) => parseNum(row[i+1]))
+  const getMeseci = (row: (string|number)[]) => Array.from({length:12}, (_,i) => parseNum(row[i+1]))
 
   // Sekcije (0-based row indeksi):
   // R8(idx=7)=Plate header, R9-R14=stavke, R15(idx=14)=Total plate
@@ -2559,8 +2573,9 @@ async function finTab(tab, btn) {
       <td style="color:#64748b">\${fmtInt(ytd.rezervacije)}</td>
     </tr>\`
 
+    const sheetsWarn = sheetsOk ? '' : '<div style="margin-bottom:16px;padding:12px 16px;background:#451a03;border:1px solid #92400e;border-radius:10px;color:#fbbf24;font-size:13px"><i class="fas fa-exclamation-triangle mr-2"></i>Google Sheets nije dostupan \u2014 rashodi prikazani kao 0. Podesite SHEETS_PRIVATE_KEY, SHEETS_CLIENT_EMAIL i SHEETS_SPREADSHEET_ID secrets.</div>'
     content.innerHTML = kpiHtml + \`
-      \${!sheetsOk ? \`<div style="margin-bottom:16px;padding:12px 16px;background:#451a03;border:1px solid #92400e;border-radius:10px;color:#fbbf24;font-size:13px"><i class="fas fa-exclamation-triangle mr-2"></i>Google Sheets nije dostupan — rashodi prikazani kao 0. Podesite SHEETS_PRIVATE_KEY, SHEETS_CLIENT_EMAIL i SHEETS_SPREADSHEET_ID secrets.</div>\` : ''}
+      \${sheetsWarn}
       <div class="card" style="margin-bottom:16px">
         <div style="font-weight:600;margin-bottom:4px;font-size:14px;color:#f1f5f9"><i class="fas fa-chart-line mr-2" style="color:#10b981"></i>P&L trend 2026 — Prihod vs Rashodi vs Neto</div>
         <div style="font-size:12px;color:#475569;margin-bottom:14px">Prihod = Naša marža bez PDV (MySQL real-time). Rashodi = Plate + Operativni + Razvoj (Sheets "2026", konvertovano po kursu \${fmt(kurs,0)} RSD/EUR).</div>
